@@ -2,7 +2,12 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v14 (9 nov 2026)
+// ForkTikiLauncher — v15 (9 nov 2026)
+// v15: en Fork ya salen TODOS los disponibles de GitHub, no solo 4.
+// Boton "Cargar todos los forks de GitHub": consulta los forks de
+// seedds/nxnative en la API de GitHub (hasta 100), los mete en la
+// lista del Picker, con su nombre y estrellas, y te dice cuantos cargo.
+// Tambien busca forks de kid-with-sword-remake.
 // v14: la app RECONOCE tu juego sola. Al elegir el juego (o poner su
 // Title ID), te dice en una tarjeta verde: hay fork para este juego,
 // cual es, y que mejora se le puede aplicar al compilar. Un boton
@@ -77,6 +82,13 @@ struct Fork: Identifiable, Hashable {
     let name: String
     let repo: String
     let folder: String
+}
+
+struct GitHubFork: Decodable {
+    let full_name: String
+    let html_url: String
+    let description: String?
+    let stargazers_count: Int?
 }
 
 struct Preset: Identifiable, Hashable {
@@ -217,8 +229,9 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v14"
-    private let appVersionNumber = 14
+    private let appVersion = "v15"
+    private let appVersionNumber = 15
+    @State private var allForksStatus: String = ""
     @State private var forkRecommendation: String = recommendedFork(for: "0400486024DEC000").text
     @State private var forkSearchText: String = ""
     @State private var forkSearchStatus: String = ""
@@ -547,6 +560,15 @@ struct ContentView: View {
                     Button("Clonar / actualizar fork") { cloneOrUpdateFork() }
                     Text(gitStatus).font(.callout).foregroundStyle(.secondary)
                 }
+                HStack {
+                    Button { loadAllForksFromGitHub() } label: {
+                        Label("Cargar todos los forks de GitHub", systemImage: "list.bullet")
+                    }
+                    .buttonStyle(.bordered)
+                    Text(allForksStatus).font(.callout).foregroundStyle(.secondary)
+                }
+                Text("Esto trae TODOS los forks de nxnative que hay en GitHub, hasta 100, y los mete en esta lista. Ya no son solo 4, son todos los disponibles.")
+                    .font(.callout).foregroundStyle(.secondary)
                 Text("Fork: \(forkVersion). V22 trae Potato mode para 15 Pro, MetalFX a 0.25, shaders 1 GB menos y fix de foliage en Kokiri. Aviso V22: se cierra en la primera nota de ocarina.")
                     .font(.callout).foregroundStyle(.secondary)
                 Toggle("Mejoras tiki (Ocarina: nota + memoria)", isOn: $applyTikiFixes)
@@ -1027,6 +1049,35 @@ struct ContentView: View {
         appendLog("$ Buscar forks: \(q)\n")
         runCommand("/bin/sh", ["-c", script]) { code in
             forkSearchStatus = code == 0 ? "Mira el log: ahí van los forks. Copia la URL del que quieras." : "No se pudo buscar (código \(code))."
+        }
+    }
+
+    /// Cargar TODOS los forks disponibles de GitHub en la lista.
+    /// Baja los forks de seedds/nxnative (hasta 100) y de kid, los
+    /// decodifica y los mete en el Picker, sin duplicar los que ya
+    /// estaban. Si GitHub no responde, te lo dice y no borra la lista.
+    private func loadAllForksFromGitHub() {
+        allForksStatus = "Cargando todos los forks de GitHub…"
+        let jsonURL = baseDir.appendingPathComponent("forks.json")
+        let script = "curl -s 'https://api.github.com/repos/seedds/nxnative/forks?per_page=100' -o /tmp/forks1.json; curl -s 'https://api.github.com/repos/cheemu21/kid-with-sword-remake/forks?per_page=100' -o /tmp/forks2.json; /opt/homebrew/bin/python3.12 -c \"import json; a=json.load(open('/tmp/forks1.json')); b=json.load(open('/tmp/forks2.json')); json.dump(a+b, open('\(jsonURL.path)','w'))\" || echo 'No se pudo cargar GitHub'"
+        appendLog("$ Cargar todos los forks de GitHub\n")
+        runCommand("/bin/sh", ["-c", script]) { code in
+            guard let data = try? Data(contentsOf: jsonURL),
+                  let list = try? JSONDecoder().decode([GitHubFork].self, from: data) else {
+                allForksStatus = "No se pudo cargar GitHub. Revisa el log e inténtalo de nuevo."
+                return
+            }
+            var added = 0
+            for item in list {
+                let repo = item.html_url + ".git"
+                if forks.contains(where: { $0.repo == repo }) { continue }
+                let folder = item.full_name.split(separator: "/").last.map(String.init) ?? item.full_name
+                let stars = item.stargazers_count ?? 0
+                let name = "\(item.full_name) ★\(stars)"
+                forks.append(Fork(id: UUID().uuidString, name: name, repo: repo, folder: folder))
+                added += 1
+            }
+            allForksStatus = "Listo: \(added) forks nuevos, \(forks.count) en total en la lista."
         }
     }
 
