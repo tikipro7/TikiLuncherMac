@@ -1,0 +1,12 @@
+name: ForkTikiLauncher
+options:
+  bundleIdPrefix: com.tiki.forktikilauncher
+targets:
+  ForkTikiLauncher:
+    type: application
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Sources/ForkTikiLauncher
+    settings:
+      GENERATE_INFOPLIST_FILE: YES

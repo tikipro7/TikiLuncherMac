@@ -1,0 +1,1101 @@
+import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
+
+// ForkTikiLauncher — v8 (9 nov 2026)
+// v8: mejoras tiki aplicadas al fork kid V22 antes del build, si el
+// toggle está prendido (default ON, solo para kid/Ocarina):
+//  1) fix primera nota de ocarina, commit real 8feddfe (NO b1d7c70/6121fd7),
+//     4 líneas en dm/host/hle_hid.c, IsOunceVibrationDeviceMounted.
+//  2) memoria/disco upstream 8d5d4f1, guest files devuelven bloques
+//     con F_PUNCHHOLE, 1.84 GB devueltos en Mac, ataca el cierre por
+//     falta de espacio libre. Cherry-pick en la Mac, donde el build valida.
+// v7.1: sin preset por defecto — Luis lo agrega afuera. El preset
+// V22 sigue disponible en la lista, pero ya no se aplica solo.
+// v7: preset 30 fps actualizado a V22 (Potato mode V18 para 15 Pro,
+// MetalFX a 0.25 en V19, shaders 1 GB menos en V21, foliage Kokiri
+// en V22). Aviso: V22 se cierra en la primera nota de ocarina.
+// v6: preset 30 fps actualizado a V17 (DM_FPS_HOLD=off, DM_FPS_PAYBACK=off,
+// DM_THERMAL_CAP=0, DM_PRESENT_SNAP=1, 30 fps estable).
+// v5: motor S2Arm headless (pack/oneclick/oneclick.sh, sin S2Arm.app ni
+// ventana), carátula del IPA (icon.png en la carpeta del build), opción
+// de borrar el juego (.nup / .nsp) al terminar el build si el IPA existe.
+// v4: motor S2Arm (rápido, genérico), preset "Sin preset", updates y DLC
+// múltiples, barra de progreso con paso/%/ETA, cuadro de Espacio para
+// cualquier juego (~4x+6 GB Separate, ~5x+7 GB Bundle), botones en vez de
+// Picker para Juego y Plataforma.
+// v3: revisa dependencias antes del Build (módulos Python, xcodegen, git)
+// e instala lo que falta, para que una Mac nueva no falle como la de Pedro
+// el 8 nov 2026 (lz4/capstone/fontTools/backports.zstd, luego xcodegen,
+// luego zbic, este último después de descomprimir 24 GB).
+// Ocarina of Time + Donkey Kong Bananza + otro juego manual, fork
+// kid-with-sword-remake o nxnative upstream, o cualquier fork de GitHub
+// que alguien añada con nombre + URL. Preset de 30 fps para M1 + 15 Pro Max.
+// Compiló en la Mac de Luis el 8 nov 2026 (tras corregir project.yml:
+// sources como lista, sin bloque info, GENERATE_INFOPLIST_FILE: YES).
+// El .app queda en DerivedData, no en build/Release.
+// No es sandbox: corre el build con Process, como lo harías en Terminal.
+
+// MARK: - Modelos
+
+struct Fork: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let repo: String
+    let folder: String
+}
+
+struct Preset: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let detail: String
+    let env: String
+}
+
+let defaultForks: [Fork] = [
+    Fork(id: "kid-with-sword",
+         name: "kid-with-sword-remake (Ocarina)",
+         repo: "https://github.com/cheemu21/kid-with-sword-remake.git",
+         folder: "kid-with-sword-remake"),
+    Fork(id: "nxnative",
+         name: "nxnative upstream (otros juegos)",
+         repo: "https://github.com/seedds/nxnative.git",
+         folder: "nxnative")
+]
+
+struct Game: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let titleId: String
+}
+
+let games: [Game] = [
+    Game(id: "oot", name: "Ocarina of Time (Switch 2)", titleId: "0400486024DEC000"),
+    Game(id: "dkb", name: "Donkey Kong Bananza (Switch 2)", titleId: "040074A01BF12000"),
+    Game(id: "other", name: "Otro juego (manual)", titleId: ""),
+]
+
+// Sin preset por defecto (Luis lo agrega afuera). El preset V22
+// sigue en la lista por si lo quiere elegir.
+// Al cambiar de juego, la app ya no vuelve a poner el de 30 fps.
+func optimalPreset(for game: Game) -> Preset { presetNone }
+let preset30 = Preset(
+    id: "m1-30fps",
+    name: "M1 + 15 Pro Max · 30 fps Potato (V22)",
+    detail: "30 fps Potato V22, render 0.25, MetalFX, Potato mode ON para 15 Pro. Primer arranque tarda más por los shaders nuevos.",
+    env: """
+    DM_FPS_TARGET=30
+    DM_RENDER_SCALE=0.25
+    DM_UPSCALER=metalfx
+    DM_PRESENT_UPSCALE=off
+    DM_PSO_PREBUILD=1
+    DM_PSO_MTL4=1
+    DM_PRESENT_SNAP=1
+    DM_FPS_HOLD=off
+    DM_FPS_PAYBACK=off
+    DM_THERMAL_CAP=0
+    DM_NVN_ENC_THREAD=1
+    DM_FRAME_WG=0
+    DM_QOS_MAP=1
+    DM_QOS_EDGES=45,59
+    DM_NVN_GPUPROF=every:600
+    DM_METAL_HUD=0
+    DM_SHOW_FPS=0
+    """
+)
+
+// El fork trae render 0.667 por default; a 60 fps solo tiene sentido
+// en hardware con más RAM (M5 / 18 Pro). Sin probar en 15 Pro Max.
+let preset60 = Preset(
+    id: "m5-60fps",
+    name: "M5 / 18 Pro · 60 fps Normal",
+    detail: "60 fps, render 0.667 (default del fork). No probado en 15 Pro Max.",
+    env: """
+    DM_FPS_TARGET=60
+    DM_RENDER_SCALE=0.667
+    DM_PSO_PREBUILD=1
+    DM_PSO_MTL4=1
+    DM_SHOW_FPS=1
+    """
+)
+
+let presetNone = Preset(
+    id: "none",
+    name: "Sin preset (default del juego)",
+    detail: "Sin env.txt. El juego corre con sus valores por default.",
+    env: ""
+)
+
+let presets: [Preset] = [preset30, preset60, presetNone]
+
+// MARK: - App
+
+@main
+struct ForkTikiLauncherApp: App {
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+    }
+}
+
+struct ContentView: View {
+    @State private var selectedEngine: String = "nxnative"
+    @State private var selectedGame: Game = games[0]
+    @State private var s2armStatus: String = ""
+    @State private var iconPath: String = ""
+    @State private var gamePlatform: String = "sw2"
+    @State private var prodKeysPath: String = ""
+    @State private var customTitleId: String = ""
+    @State private var forks: [Fork] = defaultForks
+    @State private var selectedFork: Fork = defaultForks[0]
+    @State private var customForkName: String = ""
+    @State private var customForkRepo: String = ""
+    @State private var forkAddStatus: String = ""
+    @State private var selectedPreset: Preset = presetNone
+    @State private var potatoMode: Bool = true
+    @State private var applyTikiFixes: Bool = true
+    @State private var tikiFixApplied: Bool = false
+    @State private var tikiFixStatus: String = ""
+    @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
+    @State private var forkUpdateStatus: String = ""
+    @State private var nupPath: String = ""
+    @State private var extraPaths: [String] = []
+    @State private var inputKind: String = "file"
+    @State private var gameFolderPath: String = ""
+    @State private var romfsMode: String = "separate"
+    @State private var pythonPath: String = "/opt/homebrew/bin/python3.12"
+    @State private var log: String = ""
+    @State private var status: String = "Listo."
+    @State private var gitStatus: String = ""
+    @State private var freeGB: String = "…"
+    @State private var depStatus: String = "Sin revisar en esta sesión."
+    @State private var depChecked: Bool = false
+    @State private var isCheckingDeps: Bool = false
+    @State private var isBuilding: Bool = false
+    @State private var buildProgress: Double = 0
+    @State private var buildStepText: String = ""
+    @State private var buildETA: String = ""
+
+    private var home: URL { FileManager.default.homeDirectoryForCurrentUser }
+    private var baseDir: URL { home.appendingPathComponent("ForkTikiLauncher") }
+    private var enginesDir: URL { baseDir.appendingPathComponent("engines") }
+    private var buildsDir: URL { baseDir.appendingPathComponent("builds") }
+    private var presetsDir: URL { baseDir.appendingPathComponent("presets") }
+
+    private func engineDir(_ fork: Fork) -> URL {
+        enginesDir.appendingPathComponent(fork.folder)
+    }
+
+    private var currentTitleId: String {
+        selectedGame.id == "other" ? customTitleId.trimmingCharacters(in: .whitespacesAndNewlines) : selectedGame.titleId
+    }
+
+    private func onGameChanged(_ game: Game) {
+        // Al cambiar de juego, los valores se ponen en lo más óptimo para M1 + 15 Pro Max.
+        selectedPreset = optimalPreset(for: game)
+        status = "Juego: \(game.name). Preset óptimo: \(selectedPreset.name)."
+    }
+    private var spaceNote: String {
+        romfsMode == "separate"
+            ? "Separate: IPA ~3.2 GB + romfs.img aparte. Pico ~102 GB con el .nup."
+            : "Bundle: IPA ~27 GB con todo dentro. Pico ~127 GB con el .nup."
+    }
+
+    private var freeGBValue: Double {
+        if let values = try? home.resourceValues(forKeys: [.volumeAvailableCapacityKey]),
+           let bytes = values.volumeAvailableCapacity {
+            return Double(bytes) / 1_000_000_000
+        }
+        return 0
+    }
+
+    private var inputSizeGB: Double {
+        let fm = FileManager.default
+        let path = gameInputPath
+        guard !path.isEmpty else { return 0 }
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: path, isDirectory: &isDir) else { return 0 }
+        if !isDir.boolValue {
+            let size = (try? fm.attributesOfItem(atPath: path)[.size] as? NSNumber)?.doubleValue ?? 0
+            return size / 1_000_000_000
+        }
+        // Carpeta descomprimida: suma el tamaño de los archivos dentro.
+        var total: Double = 0
+        if let enumerator = fm.enumerator(atPath: path) {
+            for case let file as String in enumerator {
+                let full = (path as NSString).appendingPathComponent(file)
+                let size = (try? fm.attributesOfItem(atPath: full)[.size] as? NSNumber)?.doubleValue ?? 0
+                total += size
+            }
+        }
+        return total / 1_000_000_000
+    }
+
+    // Pico aprox para cualquier juego, no solo Ocarina:
+    // Separate ~4x el tamaño del .nup/carpeta + 6 GB, Bundle ~5x + 7 GB.
+    // Ocarina (24 GB) da ~102 GB en Separate y ~127 GB en Bundle, que es lo medido.
+    private var spaceNeededGB: Double {
+        let nup = inputSizeGB
+        guard nup > 0 else { return romfsMode == "separate" ? 102 : 127 }
+        return romfsMode == "separate" ? nup * 4 + 6 : nup * 5 + 7
+    }
+
+    private var inputSizeText: String {
+        if inputSizeGB > 0 {
+            return String(format: "Juego: ~%.1f GB (%@)", inputSizeGB, selectedGame.name)
+        }
+        return "Juego: tamaño sin medir, elige el .nup o la carpeta para calcularlo"
+    }
+
+    private var romfsModeText: String { romfsMode == "separate" ? "Separate" : "Bundle" }
+
+    private var spaceNeededText: String {
+        String(format: "Este build consumirá: ~%.0f GB en pico (%@), con el .nup incluido", spaceNeededGB, romfsModeText)
+    }
+
+    private var spaceFreeText: String {
+        String(format: "Tienes: %.0f GB libres en tu Mac", freeGBValue)
+    }
+
+    private var spaceResultText: String {
+        if spaceFits {
+            return String(format: "Te sobran ~%.0f GB después del build. Sí cabe.", freeGBValue - spaceNeededGB)
+        }
+        return String(format: "No cabe: te faltan ~%.0f GB. Libera espacio o usa Separate.", spaceNeededGB - freeGBValue)
+    }
+
+    private var spaceFits: Bool { freeGBValue >= spaceNeededGB }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Text("ForkTikiLauncher").font(.largeTitle.bold())
+                    Spacer()
+                    Text(freeGB).font(.callout).foregroundStyle(.secondary)
+                }
+                Text("Solo 4 pasos: 1 Motor, 2 Juego, 3 Preset, 4 Compilar. Lo demás es opcional.")
+                    .font(.callout).foregroundStyle(.secondary)
+
+                Divider()
+                Text("Paso 1 · Motor: ¿rápido o optimizado?").font(.headline)
+                HStack {
+                    Button("nxnative / fork (Ocarina optimizado)") { selectedEngine = "nxnative" }
+                        .buttonStyle(.bordered)
+                        .tint(selectedEngine == "nxnative" ? .orange : nil)
+                    Button("S2Arm (rápido, genérico)") { selectedEngine = "s2arm" }
+                        .buttonStyle(.bordered)
+                        .tint(selectedEngine == "s2arm" ? .orange : nil)
+                }
+                if selectedEngine == "s2arm" {
+                    Text("S2Arm headless, sin instalar S2Arm.app y sin abrir su ventana. Usa pack/oneclick/oneclick.sh del repo copiado en engines/s2arm. ForkTikiLauncher lo corre directo, te da IPA + paquete de recursos.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    HStack {
+                        Button("Copiar motor S2Arm a la app") { copyS2ArmEngine() }
+                        Text(s2armStatus).font(.callout).foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Button("Compilar con S2Arm (sin abrir su app)") { openS2Arm() }
+                        Text(s2armStatus).font(.callout).foregroundStyle(.secondary)
+                    }
+                    Text("Copiar el motor clona todo el repo de S2Arm en ~/ForkTikiLauncher/engines/s2arm. El build corre headless con pack/oneclick/oneclick.sh, sin instalar S2Arm.app ni abrir su launcher.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+
+                Divider()
+                Text("Herramientas de GitHub (opcional, un clic)").font(.headline)
+                Text("Con un botón se descarga en el momento, no tienes que ir a GitHub a mano. Se guarda en ~/ForkTikiLauncher/engines/.")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button("Descargar kid-with-sword-remake") { downloadFromGitHub(repo: "https://github.com/cheemu21/kid-with-sword-remake.git", folder: "kid-with-sword-remake") }
+                    if hasKid { Text("✓ Ya lo tienes").foregroundStyle(.green) }
+                    Button("Descargar nxnative") { downloadFromGitHub(repo: "https://github.com/seedds/nxnative.git", folder: "nxnative") }
+                    if hasNxnative { Text("✓ Ya lo tienes").foregroundStyle(.green) }
+                }
+                HStack {
+                    Button("Descargar S2Arm (código)") { downloadFromGitHub(repo: "https://github.com/jhaizhou-ops/S2Arm.git", folder: "s2arm") }
+                    if hasS2ArmCode { Text("✓ Ya lo tienes").foregroundStyle(.green) }
+                }
+                Text(downloadStatus).font(.callout).foregroundStyle(.secondary)
+
+                Divider()
+                Text("Carátula del IPA (opcional)").font(.headline)
+                Text("Antes de cada juego, elige la imagen que quieres que lleve el IPA como icono / carátula. PNG o JPG, cuadrada, 1024×1024 ideal.")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    TextField("Ruta de la imagen, ej. ~/Downloads/ocarina.png", text: $iconPath)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Elegir imagen…") { pickIcon() }
+                    if !iconPath.isEmpty {
+                        Button("Quitar") { iconPath = "" }
+                    }
+                }
+                if !iconPath.isEmpty {
+                    Text("Imagen: \(URL(fileURLWithPath: iconPath).lastPathComponent)")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+
+                Divider()
+                Text("Paso 2 · Juego").font(.headline)
+                HStack {
+                    ForEach(games) { game in
+                        Button(game.name) { onGameChanged(game); selectedGame = game }
+                            .buttonStyle(.bordered)
+                            .tint(selectedGame.id == game.id ? .orange : nil)
+                    }
+                }
+                if selectedGame.id == "other" {
+                    TextField("Title ID manual, ej. 0400486024DEC000", text: $customTitleId)
+                        .textFieldStyle(.roundedBorder)
+                } else {
+                    Text("\(selectedGame.name) · \(selectedGame.titleId)")
+                        .font(.callout)
+                }
+                Text("Plataforma").font(.subheadline.bold())
+                HStack {
+                    Button("Switch 2 (.nup, sin prod.keys)") { gamePlatform = "sw2" }
+                        .buttonStyle(.bordered)
+                        .tint(gamePlatform == "sw2" ? .orange : nil)
+                    Button("Switch 1 (.nsp/.nsz, con prod.keys)") { gamePlatform = "sw1" }
+                        .buttonStyle(.bordered)
+                        .tint(gamePlatform == "sw1" ? .orange : nil)
+                }
+                if gamePlatform == "sw1" {
+                    HStack {
+                        TextField("Ruta de tu prod.keys", text: $prodKeysPath)
+                            .textFieldStyle(.roundedBorder)
+                        Button("Elegir prod.keys…") { pickProdKeys() }
+                    }
+                    Text("Switch 1 sí ocupa prod.keys. Tiene que ser el tuyo, exportado de tu Switch. El build lo busca en su ruta estándar; si no está ahí, ponlo en ~/.local/share/eden/keys/prod.keys")
+                        .font(.callout).foregroundStyle(.secondary)
+                } else {
+                    Text("Switch 2 (.nup) no ocupa prod.keys.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+
+                Divider()
+                Text("Fork (solo si el motor es nxnative)").font(.headline)
+                Picker("Fork", selection: $selectedFork) {
+                    ForEach(forks) { fork in
+                        Text(fork.name).tag(fork)
+                    }
+                }
+                .pickerStyle(.menu)
+                HStack {
+                    Button("Clonar / actualizar fork") { cloneOrUpdateFork() }
+                    Text(gitStatus).font(.callout).foregroundStyle(.secondary)
+                }
+                Text("Fork: \(forkVersion). V22 trae Potato mode para 15 Pro, MetalFX a 0.25, shaders 1 GB menos y fix de foliage en Kokiri. Aviso V22: se cierra en la primera nota de ocarina.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Toggle("Mejoras tiki (Ocarina: nota + memoria)", isOn: $applyTikiFixes)
+                Text("Prendido: antes del build aplica al fork kid V22 el fix de la primera nota de ocarina (8feddfe, 4 líneas en hle_hid.c) y el fix de memoria/disco upstream 8d5d4f1 (devuelve 1.84 GB con F_PUNCHHOLE). Solo para kid/Ocarina, no toca el perfil ni el env, que los agregas tú afuera.")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button("Aplicar mejoras tiki ahora") { applyTikiFixesToFork { _ in } }
+                    Text(tikiFixStatus).font(.callout).foregroundStyle(.secondary)
+                }
+                HStack {
+                    Button("Revisar si hay versión nueva") { checkForkUpdate() }
+                    Text(forkUpdateStatus).font(.callout).foregroundStyle(.secondary)
+                }
+                Text("Revisar versión consulta GitHub Releases (cheemu21/kid-with-sword-remake). Si hay una V23 o más, dale a Clonar / actualizar fork y vuelve a compilar. tiki también lo revisa cada mañana y te avisa.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Text("Se clona en ~/ForkTikiLauncher/engines/\(selectedFork.folder)")
+                    .font(.callout).foregroundStyle(.secondary)
+                Text("Añadir cualquier fork").font(.subheadline.bold())
+                Text("Si alguien crea un fork nuevo, lo pega aquí y queda en la lista. No solo los dos de arriba.")
+                    .font(.callout).foregroundStyle(.secondary)
+                TextField("Nombre del fork, ej. mi-fork-ocarina", text: $customForkName)
+                    .textFieldStyle(.roundedBorder)
+                TextField("URL del repo, ej. https://github.com/usuario/mi-fork.git", text: $customForkRepo)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Añadir fork") { addCustomFork() }
+                    Text(forkAddStatus).font(.callout).foregroundStyle(.secondary)
+                }
+
+                Divider()
+                Text("Paso 3 · Preset: ¿30 o 60 fps?").font(.headline)
+                Picker("Preset", selection: $selectedPreset) {
+                    ForEach(presets) { preset in
+                        Text(preset.name).tag(preset)
+                    }
+                }
+                .pickerStyle(.menu)
+                Text(selectedPreset.detail).font(.callout).foregroundStyle(.secondary)
+                Toggle("Potato mode (V18+, para iPhone 15 Pro)", isOn: $potatoMode)
+                Text("Potato mode ON es lo que hace que V22 corra en tu 15 Pro Max: guarda de memoria desde 4,400 MB, recycle bin 64 MB, pools en archivos. Actívalo también en el launcher del juego al arrancar. Con Potato OFF, el build juega como V17.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Text(selectedPreset.env)
+                    .font(.system(.callout, design: .monospaced))
+                    .padding(8)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .cornerRadius(6)
+
+                Divider()
+                Text("Tu archivo del juego").font(.headline)
+                Picker("Entrada", selection: $inputKind) {
+                    Text("Archivo (.nup / .nsp / .nsz)").tag("file")
+                    Text("Carpeta del juego descomprimida").tag("folder")
+                }
+                .pickerStyle(.segmented)
+                if inputKind == "folder" {
+                    HStack {
+                        TextField("Ruta de la carpeta del juego, ej. base/exefs + base/romfs", text: $gameFolderPath)
+                            .textFieldStyle(.roundedBorder)
+                        Button("Elegir carpeta…") { pickGameFolder() }
+                    }
+                    Text("Si descomprimes el juego y te sale en carpeta, elige esa carpeta. El build la lee igual que un .nup/.nsp.")
+                        .font(.callout).foregroundStyle(.secondary)
+                } else {
+                    HStack {
+                        TextField("Ruta del .nup, manual o con el botón", text: $nupPath)
+                            .textFieldStyle(.roundedBorder)
+                        Button("Elegir .nup…") { pickNup() }
+                    }
+                }
+                Text("Puedes escribir la ruta a mano o elegir cualquier .nup, no solo el de Ocarina.")
+                    .font(.callout).foregroundStyle(.secondary)
+
+                Divider()
+                Text("Updates y DLC (opcional)").font(.headline)
+                Text("Si tu juego tiene update o DLC, agrégalos aquí. Puedes agregar más de 1 DLC, los que tengas, se pasan todos al build.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button("Agregar update / DLC…") { pickExtra() }
+                if extraPaths.isEmpty {
+                    Text("Sin updates ni DLC por ahora.")
+                        .font(.callout).foregroundStyle(.secondary)
+                } else {
+                    ForEach(extraPaths, id: \.self) { path in
+                        HStack {
+                            Text(URL(fileURLWithPath: path).lastPathComponent)
+                                .font(.callout)
+                            Spacer()
+                            Button("Quitar") { extraPaths.removeAll { $0 == path } }
+                        }
+                    }
+                    Text("\(extraPaths.count) archivo(s) de update / DLC.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+
+                Divider()
+                Text("Paso 4 · Compilar").font(.headline)
+                Text("¿Para qué dispositivo?").font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button("iPhone") { targetPlatform = "ios" }
+                        .buttonStyle(.bordered)
+                        .tint(targetPlatform == "ios" ? .blue : nil)
+                    Button("Mac") { targetPlatform = "mac" }
+                        .buttonStyle(.bordered)
+                        .tint(targetPlatform == "mac" ? .blue : nil)
+                }
+                Text(targetPlatform == "mac" ? "Mac: te da una .app para tu Mac, con el mismo fork, no un IPA." : "iPhone: te da el IPA para AltStore Classic.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Picker("RomFS", selection: $romfsMode) {
+                    Text("Separate").tag("separate")
+                    Text("Bundle (todo dentro)").tag("bundle")
+                }
+                .pickerStyle(.segmented)
+                Text(spaceNote).font(.callout).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Espacio").font(.subheadline.bold())
+                    Text(spaceFreeText)
+                    Text(inputSizeText)
+                    Text(spaceNeededText)
+                    Text(spaceResultText)
+                        .foregroundStyle(spaceFits ? .green : .red)
+                }
+                .font(.callout)
+                .padding(8)
+                .background(Color(nsColor: .textBackgroundColor))
+                .cornerRadius(6)
+                HStack {
+                    Text("Python:").font(.callout)
+                    TextField("/opt/homebrew/bin/python3.12", text: $pythonPath)
+                        .textFieldStyle(.roundedBorder)
+                }
+                Text("El fork recomienda Python 3.15; con 3.12 ocupa backports.zstd (ya lo tienes).")
+                    .font(.callout).foregroundStyle(.secondary)
+
+                Divider()
+                Text("Dependencias (se revisan solas antes de compilar)").font(.headline)
+                Text("En una Mac nueva faltan los módulos de Python, xcodegen y zbic. Revisa antes de compilar: si falta algo, el Build se para y no lo descubres después de descomprimir 24 GB.")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button("Revisar dependencias") { checkDependencies { ok in depChecked = ok } }
+                        .disabled(isCheckingDeps || isBuilding)
+                    Button("Instalar lo que falta") { installDependencies() }
+                        .disabled(isCheckingDeps || isBuilding)
+                    Text(depStatus).font(.callout).foregroundStyle(.secondary)
+                }
+
+                Divider()
+                Toggle("Borrar el juego (.nup / .nsp) cuando termine el build, para ahorrar espacio", isOn: $deleteGameAfterBuild)
+                Text("Solo se borra si el build terminó bien y el IPA ya existe. Si el build falla, no se borra nada.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button(isBuilding ? "Compilando…" : "Build \(selectedGame.name)") { build() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(isBuilding || isCheckingDeps || gameInputPath.isEmpty)
+                Text(status).font(.callout).foregroundStyle(.secondary)
+                if isBuilding {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ProgressView(value: buildProgress)
+                        HStack {
+                            Text(buildStepText.isEmpty ? "Compilando…" : buildStepText)
+                            Spacer()
+                            Text("\(Int(buildProgress * 100))%")
+                            if !buildETA.isEmpty { Text("· \(buildETA)") }
+                        }
+                        .font(.callout).foregroundStyle(.secondary)
+                    }
+                }
+
+                Text("Log del build").font(.headline)
+                TextEditor(text: $log)
+                    .font(.system(.callout, design: .monospaced))
+                    .frame(minHeight: 220)
+                    .border(Color(nsColor: .separatorColor))
+                HStack {
+                    Button("Copiar log") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(log, forType: .string)
+                    }
+                    Button("Mostrar carpeta del build") {
+                        ensureDirs()
+                        NSWorkspace.shared.open(buildsDir)
+                    }
+                    Spacer()
+                    Text("El IPA sale en la carpeta del build. No borres el .nup hasta tenerlo instalado.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+            .frame(minWidth: 640)
+        }
+        .frame(minWidth: 680, minHeight: 600)
+        .onAppear { refreshDisk() }
+    }
+
+    // MARK: - Acciones
+
+    private func ensureDirs() {
+        let fm = FileManager.default
+        for dir in [baseDir, enginesDir, buildsDir, presetsDir] {
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+    }
+
+    private func refreshDisk() {
+        if let values = try? home.resourceValues(forKeys: [.volumeAvailableCapacityKey]),
+           let bytes = values.volumeAvailableCapacity {
+            freeGB = String(format: "%.0f GB libres", Double(bytes) / 1_000_000_000)
+        } else {
+            freeGB = "espacio sin dato"
+        }
+    }
+
+    private var gameInputPath: String {
+        inputKind == "folder" ? gameFolderPath.trimmingCharacters(in: .whitespacesAndNewlines) : nupPath.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func pickGameFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                DispatchQueue.main.async {
+                    inputKind = "folder"
+                    gameFolderPath = url.path
+                    refreshDisk()
+                }
+            }
+        }
+    }
+
+    private func pickExtra() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "nsp") ?? .data, UTType(filenameExtension: "nsz") ?? .data, UTType(filenameExtension: "nup") ?? .data]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.begin { response in
+            if response == .OK {
+                for url in panel.urls where !extraPaths.contains(url.path) {
+                    extraPaths.append(url.path)
+                }
+            }
+        }
+    }
+
+    @State private var deleteGameAfterBuild: Bool = false
+    @State private var targetPlatform: String = "ios"
+    @State private var downloadStatus: String = ""
+
+    private var hasNxnative: Bool { FileManager.default.fileExists(atPath: enginesDir.appendingPathComponent("nxnative/.git").path) }
+    private var hasKid: Bool { FileManager.default.fileExists(atPath: enginesDir.appendingPathComponent("kid-with-sword-remake/.git").path) }
+    private var hasS2ArmCode: Bool { FileManager.default.fileExists(atPath: enginesDir.appendingPathComponent("s2arm/.git").path) }
+
+    private func downloadFromGitHub(repo: String, folder: String) {
+        ensureDirs()
+        let dir = enginesDir.appendingPathComponent(folder)
+        downloadStatus = "Descargando \(folder) de GitHub…"
+        if FileManager.default.fileExists(atPath: dir.appendingPathComponent(".git").path) {
+            runCommand("/usr/bin/git", ["-C", dir.path, "pull"]) { code in
+                downloadStatus = code == 0 ? "\(folder) actualizado." : "\(folder): git pull falló (código \(code))."
+            }
+        } else {
+            runCommand("/usr/bin/git", ["clone", repo, dir.path]) { code in
+                downloadStatus = code == 0 ? "\(folder) descargado en engines/\(folder)." : "\(folder): git clone falló (código \(code))."
+            }
+        }
+    }
+
+    private func downloadS2ArmApp() {
+        downloadStatus = "Descargando S2Arm.app de GitHub Releases…"
+        let dmg = home.appendingPathComponent("Downloads/S2Arm-mac-arm64.dmg").path
+        runCommand("/usr/bin/curl", ["-L", "-o", dmg, "https://github.com/jhaizhou-ops/S2Arm/releases/latest/download/S2Arm-mac-arm64.dmg"]) { code in
+            if code == 0 {
+                downloadStatus = "S2Arm descargado en Downloads/S2Arm-mac-arm64.dmg. Ábrelo y arrastra S2Arm.app a Aplicaciones."
+                NSWorkspace.shared.open(URL(fileURLWithPath: dmg))
+            } else {
+                downloadStatus = "Descarga de S2Arm falló (código \(code))."
+            }
+        }
+    }
+
+    private func pickIcon() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType.png, UTType.jpeg]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                iconPath = url.path
+            }
+        }
+    }
+
+    private func copyS2ArmEngine() {
+        ensureDirs()
+        let dir = enginesDir.appendingPathComponent("s2arm")
+        let gitDir = dir.appendingPathComponent(".git").path
+        s2armStatus = "Copiando motor S2Arm…"
+        if FileManager.default.fileExists(atPath: gitDir) {
+            runCommand("/usr/bin/git", ["-C", dir.path, "pull"]) { code in
+                s2armStatus = code == 0 ? "Motor S2Arm actualizado en engines/s2arm." : "git pull falló (código \(code)). Revisa el log."
+            }
+        } else {
+            runCommand("/usr/bin/git", ["clone", "https://github.com/jhaizhou-ops/S2Arm.git", dir.path]) { code in
+                s2armStatus = code == 0 ? "Motor S2Arm copiado en engines/s2arm." : "git clone falló (código \(code)). Revisa el log."
+            }
+        }
+    }
+
+    private func pickProdKeys() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "keys") ?? .data]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                prodKeysPath = url.path
+            }
+        }
+    }
+
+    private func pickNup() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [
+            UTType(filenameExtension: "nup") ?? .data,
+            UTType(filenameExtension: "nsp") ?? .data,
+            UTType(filenameExtension: "nsz") ?? .data,
+        ]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                DispatchQueue.main.async {
+                    inputKind = "file"
+                    nupPath = url.path
+                    refreshDisk()
+                }
+            }
+        }
+    }
+
+    private func appendLog(_ text: String) {
+        DispatchQueue.main.async {
+            log += text
+            parseProgress(text)
+        }
+    }
+
+    /// Lee el log del build y saca paso, % y ETA para la barra.
+    /// El build escribe [1/6] unpack, [2/6] rewrite, [3/6] shader split…
+    /// y en shaders escribe "6,789 / 42,854 shaders" y "ETA 0:05".
+    private func parseProgress(_ text: String) {
+        // ETA que trae el propio build, ej. "ETA 0:05" o "ETA 1:16:00".
+        if let etaRange = text.range(of: "ETA ") {
+            let rest = text[etaRange.upperBound...]
+            let eta = rest.split(separator: " ").first.map(String.init) ?? ""
+            if !eta.isEmpty { buildETA = "ETA \(eta)" }
+        }
+        // Paso [x/6] o [x/5].
+        if let open = text.firstIndex(of: "["),
+           let close = text[open...].firstIndex(of: "]") {
+            let inside = String(text[text.index(after: open)..<close])
+            let parts = inside.split(separator: "/")
+            if parts.count == 2,
+               let step = Double(parts[0]), let total = Double(parts[1]), total > 0 {
+                let stepName = text[close...].trimmingCharacters(in: .whitespacesAndNewlines)
+                    .split(separator: " ").first.map(String.init) ?? ""
+                buildStepText = "Paso \(Int(step)) de \(Int(total))" + (stepName.isEmpty ? "" : " · \(stepName)")
+                var frac = (step - 1) / total
+                // Dentro de shader split, el conteo "6,789 / 42,854" afina el %.
+                if text.lowercased().contains("shader") {
+                    let nums = text.split(whereSeparator: { !$0.isNumber && $0 != "," })
+                        .compactMap { Double($0.replacingOccurrences(of: ",", with: "")) }
+                    if nums.count >= 2, nums[1] > 0 {
+                        frac = ((step - 1) + min(1, nums[0] / nums[1])) / total
+                    }
+                }
+                buildProgress = min(1, max(0, frac))
+            }
+        }
+        if text.contains("BUILD SUCCEEDED") || log.contains("✓ [6/6]") || log.contains("✓ [5/5]") {
+            buildProgress = 1
+            buildStepText = "Terminado"
+        }
+    }
+
+    /// Corre un comando y manda cada línea al log. Llama onDone en el hilo principal.
+    private func runCommand(_ launchPath: String, _ args: [String], onDone: @escaping (Int32) -> Void) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: launchPath)
+        process.arguments = args
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if let line = String(data: data, encoding: .utf8), !line.isEmpty {
+                appendLog(line)
+            }
+        }
+        process.terminationHandler = { proc in
+            pipe.fileHandleForReading.readabilityHandler = nil
+            DispatchQueue.main.async { onDone(proc.terminationStatus) }
+        }
+        do {
+            try process.run()
+        } catch {
+            DispatchQueue.main.async {
+                status = "No se pudo correr \(launchPath): \(error.localizedDescription)"
+            }
+            onDone(-1)
+        }
+    }
+
+    private func addCustomFork() {
+        let name = customForkName.trimmingCharacters(in: .whitespacesAndNewlines)
+        var repo = customForkRepo.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { forkAddStatus = "Ponle un nombre al fork."; return }
+        guard repo.contains("github.com/") else { forkAddStatus = "Esa URL no parece de GitHub."; return }
+        if !repo.hasSuffix(".git") { repo += ".git" }
+        var folder = repo.split(separator: "/").last.map(String.init) ?? name
+        folder = folder.replacingOccurrences(of: ".git", with: "")
+        if forks.contains(where: { $0.repo == repo }) { forkAddStatus = "Ese fork ya está en la lista."; return }
+        let fork = Fork(id: UUID().uuidString, name: name, repo: repo, folder: folder)
+        forks.append(fork)
+        selectedFork = fork
+        customForkName = ""
+        customForkRepo = ""
+        forkAddStatus = "Fork añadido: \(name). Dale a Clonar / actualizar fork."
+    }
+
+    private func checkForkUpdate() {
+        forkUpdateStatus = "Revisando GitHub Releases…"
+        let script = "curl -s https://api.github.com/repos/cheemu21/kid-with-sword-remake/releases/latest | grep -m1 '\"tag_name\"' || echo 'No se pudo leer GitHub'"
+        appendLog("$ Revisar versión del fork\n")
+        runCommand("/bin/sh", ["-c", script]) { code in
+            forkUpdateStatus = code == 0 ? "Revisa el log: si el tag es mayor que V22, actualiza el fork." : "No se pudo revisar (código \(code))."
+        }
+    }
+
+    /// Mejoras tiki para Ocarina, solo en el fork kid V22.
+    /// 1) Fix primera nota (commit real 8feddfe, NO b1d7c70/6121fd7):
+    ///    4 líneas en dm/host/hle_hid.c, IsOunceVibrationDeviceMounted.
+    /// 2) Memoria/disco upstream 8d5d4f1: guest files devuelven bloques
+    ///    con F_PUNCHHOLE, 1.84 GB devueltos en Mac.
+    /// No toca perfil ni env.txt. Si un fix ya está, lo salta.
+    /// Si el cherry-pick da conflicto, lo aborta y sigue con el otro fix;
+    /// el build no se para por esto, pero el log lo dice.
+    private func applyTikiFixesToFork(onDone: @escaping (Bool) -> Void) {
+        guard selectedFork.folder == "kid-with-sword-remake" else {
+            tikiFixStatus = "Mejoras tiki solo para kid/Ocarina."
+            onDone(true)
+            return
+        }
+        let dir = engineDir(selectedFork)
+        guard FileManager.default.fileExists(atPath: dir.appendingPathComponent(".git").path) else {
+            tikiFixStatus = "Primero clona el fork."
+            onDone(false)
+            return
+        }
+        tikiFixStatus = "Aplicando mejoras tiki…"
+        appendLog("$ Mejoras tiki: ocarina 8feddfe + memoria 8d5d4f1\n")
+        // Parche de la nota, embebido, para no depender de un archivo suelto.
+        let patch = """
+        diff --git a/dm/host/hle_hid.c b/dm/host/hle_hid.c
+        --- a/dm/host/hle_hid.c
+        +++ b/dm/host/hle_hid.c
+        @@ -906,6 +906,10 @@
+         HLE_FORCE("_ZN2nn3hid24IsVibrationDeviceMountedERKNS0_21VibrationDeviceHandleE", "vibration: device mounted when the channel has an output", unsigned, h_hid_VibMounted, const uint32_t *h) {
+             return h && vib_targets(*h);
+         }
+        +// The Switch 2's form of the same question (Kirby Air Riders asks soon after boot in a run with a window, main+0x10709b0; its SDK's call reads the same null service object)
+        +HLE_FORCE("_ZN2nn3hid29IsOunceVibrationDeviceMountedERKNS0_21VibrationDeviceHandleE", "vibration (Switch 2): device mounted when the channel has an output", unsigned, h_hid_VibMountedOunce, const uint32_t *h) {
+        +    return h && vib_targets(*h);
+        +}
+         HLE_FORCE("_ZN2nn3hid23GetActualVibrationValueEPNS0_14VibrationValueERKNS0_21VibrationDeviceHandleE", "vibration: last accepted channel value", void, h_hid_VibActual, dm_vibration *v, const uint32_t *h) {
+             uint32_t targets = h ? vib_targets(*h) : 0;
+             *v = targets ? dm_haptics_actual(__builtin_ctz(targets), *h >> 16 & 1) : (dm_vibration){0, 160, 0, 320};
+        """
+        let patchURL = FileManager.default.temporaryDirectory.appendingPathComponent("ocarina-note-fix.patch")
+        try? patch.write(to: patchURL, atomically: true, encoding: .utf8)
+        let script = """
+        set -x
+        cd "\(dir.path)"
+        git checkout v22 2>/dev/null || git checkout 84aa8c3
+        if grep -q IsOunceVibrationDeviceMounted dm/host/hle_hid.c; then
+          echo "Ocarina: fix de la nota ya está."
+        else
+          git apply "\(patchURL.path)" && echo "Ocarina: parche de la nota aplicado." || echo "Ocarina: git apply falló, pega las 4 líneas a mano (ver NOTAS.txt)."
+        fi
+        grep -n IsOunceVibrationDeviceMounted dm/host/hle_hid.c || true
+        if grep -q guest_file_punch dm/host/hle_svc.c; then
+          echo "Memoria: fix 8d5d4f1 ya está."
+        else
+          git remote add upstream https://github.com/seedds/nxnative.git 2>/dev/null || true
+          git fetch upstream main --depth 50
+          git cherry-pick 8d5d4f1b04610fef5a96521c72a4263d68794959 && echo "Memoria: cherry-pick 8d5d4f1 aplicado." || { git cherry-pick --abort 2>/dev/null || true; echo "Memoria: cherry-pick 8d5d4f1 con conflicto, se abortó. Prueba en V23 o aplica a mano."; }
+        fi
+        grep -n guest_file_punch dm/host/hle_svc.c || true
+        echo "Mejoras tiki terminadas."
+        """
+        runCommand("/bin/sh", ["-c", script]) { code in
+            self.tikiFixStatus = code == 0 ? "Mejoras tiki aplicadas (revisa el log)." : "Mejoras tiki con avisos (código \(code)). Revisa el log."
+            onDone(code == 0)
+        }
+    }
+
+    private func cloneOrUpdateFork() {
+        ensureDirs()
+        let dir = engineDir(selectedFork)
+        let gitDir = dir.appendingPathComponent(".git").path
+        gitStatus = "Trabajando…"
+        if FileManager.default.fileExists(atPath: gitDir) {
+            runCommand("/usr/bin/git", ["-C", dir.path, "pull"]) { code in
+                gitStatus = code == 0 ? "Fork actualizado." : "git pull falló (código \(code)). Revisa el log."
+            }
+        } else {
+            runCommand("/usr/bin/git", ["clone", selectedFork.repo, dir.path]) { code in
+                gitStatus = code == 0 ? "Fork clonado." : "git clone falló (código \(code)). Revisa el log."
+            }
+        }
+    }
+
+    /// Revisa lo que el build necesita antes de descomprimir nada:
+    /// módulos Python lz4.block, capstone, fontTools, backports.zstd y zbic,
+    /// más xcodegen y git. Devuelve true solo si está todo.
+    private func checkDependencies(onDone: @escaping (Bool) -> Void) {
+        isCheckingDeps = true
+        depStatus = "Revisando…"
+        let script = """
+        PY="\(pythonPath)"
+        missing=0
+        for m in lz4.block capstone fontTools backports.zstd zbic; do
+          "$PY" -c "import $m" 2>/dev/null || { echo "Falta módulo Python: $m"; missing=1; }
+        done
+        command -v xcodegen >/dev/null 2>&1 || { echo "Falta: xcodegen (brew install xcodegen)"; missing=1; }
+        command -v git >/dev/null 2>&1 || { echo "Falta: git"; missing=1; }
+        if [ "$missing" = 0 ]; then echo "Dependencias OK."; else exit 1; fi
+        """
+        appendLog("$ Revisar dependencias\n")
+        runCommand("/bin/sh", ["-c", script]) { code in
+            isCheckingDeps = false
+            depStatus = code == 0 ? "Dependencias OK." : "Faltan dependencias — mira el log."
+            onDone(code == 0)
+        }
+    }
+
+    /// Instala lo que faltó, con el mismo comando que se le dio a Pedro:
+    /// pip con --break-system-packages (el pip de Homebrew bloquea el
+    /// pip normal) y brew install xcodegen si no está.
+    private func installDependencies() {
+        isCheckingDeps = true
+        depStatus = "Instalando lo que falta… tarda unos minutos."
+        let script = """
+        "\(pythonPath)" -m pip install --break-system-packages lz4 "capstone>=5,<6" fonttools backports.zstd zbic
+        command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+        echo "Instalación terminada. Dale a Revisar dependencias para confirmar."
+        """
+        appendLog("$ Instalar dependencias\n")
+        runCommand("/bin/sh", ["-c", script]) { code in
+            isCheckingDeps = false
+            depChecked = false
+            depStatus = code == 0
+                ? "Instalación terminada. Dale a Revisar dependencias para confirmar."
+                : "La instalación terminó con error (código \(code)). Revisa el log."
+        }
+    }
+
+    private func openS2Arm() {
+        // S2Arm headless, sin instalar S2Arm.app y sin abrir su ventana.
+        // Usa pack/oneclick/oneclick.sh del repo copiado en engines/s2arm.
+        // s2armctl NO sirve sin S2Arm.app, este sí.
+        let engine = enginesDir.appendingPathComponent("s2arm")
+        let oneclick = engine.appendingPathComponent("pack/oneclick/oneclick.sh").path
+        guard FileManager.default.fileExists(atPath: oneclick) else {
+            s2armStatus = "No está el motor S2Arm copiado. Dale a 'Copiar motor S2Arm a la app' o a 'Descargar S2Arm (código)' primero."
+            return
+        }
+        var isDir: ObjCBool = false
+        FileManager.default.fileExists(atPath: gameInputPath, isDirectory: &isDir)
+        let gameFolder = isDir.boolValue ? gameInputPath : (gameInputPath as NSString).deletingLastPathComponent
+        s2armStatus = "S2Arm headless: preparando toolchains y compilando iOS…"
+        appendLog("S2Arm headless: bash \(oneclick) \"\(gameFolder)\" --target ios\n")
+        let applenv = engine.appendingPathComponent("pack/jobs/applenv.py").path
+        runCommand(pythonPath, [applenv]) { _ in
+            var args: [String] = [oneclick, gameFolder, "--target", targetPlatform == "mac" ? "mac" : "ios"]
+            if !prodKeysPath.isEmpty {
+                args += ["--keys", prodKeysPath]
+            }
+            runCommand("/bin/bash", args) { code in
+                s2armStatus = code == 0
+                    ? "S2Arm headless terminó. Busca el .ipa y el paquete de recursos en la carpeta de salida."
+                    : "S2Arm headless falló (código \(code)). Revisa el log."
+            }
+        }
+    }
+
+    private func build() {
+        if selectedEngine == "s2arm" {
+            openS2Arm()
+            return
+        }
+        guard FileManager.default.fileExists(atPath: gameInputPath) else {
+            status = "El juego no existe en esa ruta. Escríbelo a mano o elígelo con el botón."
+            return
+        }
+        guard !currentTitleId.isEmpty else {
+            status = "Pon el Title ID del juego, para el build."
+            return
+        }
+        if gamePlatform == "sw1" {
+            guard !prodKeysPath.isEmpty, FileManager.default.fileExists(atPath: prodKeysPath) else {
+                status = "Switch 1 ocupa prod.keys. Elige tu prod.keys con el botón."
+                return
+            }
+            appendLog("prod.keys: \(prodKeysPath)\n")
+        }
+        // Sin dependencias revisadas no se arranca: en la Mac de Pedro el
+        // build falló por módulos, luego por xcodegen y luego por zbic,
+        // este último después de descomprimir 24 GB. Si falta algo, se
+        // para aquí y se le dice que instale, en vez de fallar a mitad.
+        if !depChecked {
+            status = "Revisando dependencias antes del Build…"
+            checkDependencies { ok in
+                if ok {
+                    depChecked = true
+                    build()
+                } else {
+                    status = "Faltan dependencias (mira el log). Dale a Instalar lo que falta y luego Build."
+                }
+            }
+            return
+        }
+        // Mejoras tiki, una vez por Build, antes de compilar: si el toggle
+        // está prendido y el motor es kid, aplica ocarina + memoria y
+        // luego vuelve a build() ya con tikiFixApplied en true.
+        if applyTikiFixes && !tikiFixApplied {
+            tikiFixApplied = true
+            status = "Aplicando mejoras tiki al fork…"
+            applyTikiFixesToFork { _ in self.build() }
+            return
+        }
+        let engine = engineDir(selectedFork)
+        let script = engine.appendingPathComponent("scripts/build_ipa_from_nsp.py").path
+        guard FileManager.default.fileExists(atPath: script) else {
+            status = "No está el script en \(engine.path). Primero clona el fork."
+            return
+        }
+        ensureDirs()
+        if potatoMode {
+            appendLog("Potato mode V18+ ON: activa Potato en el launcher del juego al arrancar (render 0.25, 30 fps).\n")
+        }
+        let envURL = presetsDir.appendingPathComponent("\(selectedPreset.id).txt")
+        var envArgs: [String] = []
+        if !selectedPreset.env.isEmpty {
+            do {
+                try selectedPreset.env.write(to: envURL, atomically: true, encoding: .utf8)
+            } catch {
+                status = "No se pudo escribir el env: \(error.localizedDescription)"
+                return
+            }
+            envArgs = ["--env-file", envURL.path]
+        } else {
+            appendLog("Sin preset: no se pasa --env-file, el juego usa sus valores por default.\n")
+        }
+        let workDir = buildsDir.appendingPathComponent("\(currentTitleId)_build").path
+        isBuilding = true
+        buildProgress = 0
+        buildStepText = "Empezando…"
+        buildETA = ""
+        log = ""
+        status = "Compilando \(selectedGame.name) con \(selectedFork.name)… tarda 1-2 h, no cierres la app."
+        if !iconPath.isEmpty, FileManager.default.fileExists(atPath: iconPath) {
+            try? FileManager.default.createDirectory(atPath: workDir, withIntermediateDirectories: true)
+            let iconDest = (workDir as NSString).appendingPathComponent("icon.png")
+            try? FileManager.default.removeItem(atPath: iconDest)
+            try? FileManager.default.copyItem(atPath: iconPath, toPath: iconDest)
+            appendLog("Imagen del IPA: \(iconPath) -> \(iconDest)\n")
+        }
+        appendLog("$ \(pythonPath) \(script) \(gameInputPath) \(extraPaths.joined(separator: " ")) --romfs \(romfsMode) --work-dir \(workDir) -l es-419 \(envArgs.joined(separator: " "))\n")
+        var buildArgs: [String] = [script, gameInputPath] + extraPaths + ["--romfs", romfsMode,
+                                "--work-dir", workDir, "-l", "es-419"] + envArgs
+        if targetPlatform == "mac" {
+            buildArgs += ["--platform", "mac-app"]
+        }
+        runCommand(pythonPath, buildArgs) { code in
+            isBuilding = false
+            tikiFixApplied = false
+            if code == 0 {
+                buildProgress = 1
+                buildStepText = "Terminado"
+                status = "Build terminado. El IPA está en la carpeta del build."
+                if deleteGameAfterBuild {
+                    let ipaPath = buildsDir.appendingPathComponent("\(selectedGame.name).ipa").path
+                    // El IPA de nxnative sale como <NombreDelJuego>.ipa en builds/,
+                    // o como OcarinaOfTime.ipa; solo borra si hay un IPA nuevo.
+                    let ipaFiles = (try? FileManager.default.contentsOfDirectory(atPath: buildsDir.path).filter { $0.hasSuffix(".ipa") }) ?? []
+                    if !ipaFiles.isEmpty {
+                        try? FileManager.default.removeItem(atPath: gameInputPath)
+                        status += " Juego original borrado para ahorrar espacio."
+                        appendLog("Juego original borrado: \(gameInputPath)\n")
+                    } else {
+                        status += " No se borró el juego porque no se encontró el IPA."
+                    }
+                    _ = ipaPath
+                }
+            } else {
+                status = "El build terminó con error (código \(code)). Copia el log y mándamelo."
+            }
+            refreshDisk()
+        }
+    }
+}
