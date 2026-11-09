@@ -1,8 +1,12 @@
 # TikiLuncherMac
 
-ForkTikiLauncher v12 para Mac + fork tiki-v22 de Ocarina of Time.
+ForkTikiLauncher v13 para Mac + fork tiki-v22 de Ocarina of Time.
 
 Launcher SwiftUI para Mac que construye juegos de Switch / Switch 2 a IPA para iPhone (AltStore Classic) o a .app para Mac, con nxnative / NX2Apple, con selector de fork, presets y descarga de herramientas. Todo desde el launcher, sin abrir otra app.
+
+## Que trae la v13
+
+- **v13: auto-actualización de verdad.** La v10-v12 intentaba reemplazar la app mientras corría y macOS no dejaba, por eso tenías que venir a descargar y compilar. Ahora, si hay versión nueva, la app se cierra sola, un actualizador aparte recompila y abre la app nueva solo. La primera vez a v13 sí es a mano una vez, con `bash actualizar.sh`.
 
 ## Que trae la v12
 

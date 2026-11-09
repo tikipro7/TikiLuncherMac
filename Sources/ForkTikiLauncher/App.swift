@@ -2,7 +2,14 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v12 (9 nov 2026)
+// ForkTikiLauncher — v13 (9 nov 2026)
+// v13: auto-actualizacion DE VERDAD. La v10-v12 fallaba porque intentaba
+// reemplazar la app mientras estaba corriendo, y macOS no deja. Ahora,
+// si hay version nueva, la app escribe un actualizador aparte,
+// se CIERRA sola, el actualizador baja el codigo, recompila y ABRE
+// la app nueva solo. Tu no tienes que descargar, copiar ni compilar nada.
+// OJO: la primera vez que pases a v13 SI tienes que hacerlo a mano una
+// vez, porque la v8/v9 que tienes no trae este codigo todavia.
 // v12: optimizado NO solo Ocarina. 1) Buscar forks en GitHub: escribe
 // el nombre del juego y te lista forks de nxnative en el log, para
 // añadir el que quieras. 2) Optimizacion universal Switch 2: aplica
@@ -182,8 +189,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v12"
-    private let appVersionNumber = 12
+    private let appVersion = "v13"
+    private let appVersionNumber = 13
     @State private var forkSearchText: String = ""
     @State private var forkSearchStatus: String = ""
     @State private var universalOptStatus: String = ""
@@ -1007,14 +1014,15 @@ struct ContentView: View {
         }
     }
 
-    /// Auto-actualización del propio launcher desde tu GitHub
-    /// tikipro7/TikiLuncherMac. Lee la versión del README en main;
-    /// si es mayor que appVersionNumber, baja solo el App.swift nuevo,
-    /// lo copia a Sources/ForkTikiLauncher/App.swift, corre xcodegen +
-    /// xcodebuild y copia la app nueva a build/Release. No puede
-    /// reemplazar la app que está corriendo, por eso al final te dice
-    /// que cierres esta y abras la nueva. Si no hay versión nueva,
-    /// no toca nada. Si el build falla, la app vieja sigue intacta.
+    /// Auto-actualización DE VERDAD desde tu GitHub tikipro7/TikiLuncherMac.
+    /// Lee la versión del README en main. Si no hay nada nuevo, no toca nada.
+    /// Si hay una mayor, escribe un actualizador aparte en
+    /// ~/ForkTikiLauncher/actualizar.sh, lo lanza en segundo plano y
+    /// CIERRA esta app. El actualizador espera 3 s, baja el App.swift
+    /// nuevo, corre xcodegen + xcodebuild, copia la app nueva a
+    /// build/Release y LA ABRE solo. Así ya no tienes que descargar,
+    /// copiar ni compilar nada a mano. Si el build falla, la app vieja
+    /// sigue en build/Release y el log queda en actualizar.log.
     private func checkAppUpdate() {
         appUpdateStatus = "Revisando tu GitHub…"
         let script = """
@@ -1024,17 +1032,35 @@ struct ContentView: View {
         echo "Versión en GitHub: v$VER, esta app: \(appVersion)"
         if [ -z "$VER" ]; then echo "No se pudo leer GitHub, no se actualiza."; exit 0; fi
         if [ "$VER" -le \(appVersionNumber) ]; then echo "Ya estás en la última versión."; exit 0; fi
-        echo "Hay versión nueva v$VER, actualizando sola…"
+        echo "Hay versión nueva v$VER, actualizando sola, la app se va a cerrar…"
+        cat > actualizar.sh <<'EOS'
+        #!/bin/sh
+        sleep 3
+        cd "$HOME/ForkTikiLauncher" || exit 1
+        exec >> actualizar.log 2>&1
+        echo "Actualizando a la versión nueva…"
         curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/Sources/ForkTikiLauncher/App.swift -o Sources/ForkTikiLauncher/App.swift
         curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/project.yml -o project.yml
         xcodegen generate
         xcodebuild -project ForkTikiLauncher.xcodeproj -scheme ForkTikiLauncher -configuration Release build
-        cp -R /Users/tiki/Library/Developer/Xcode/DerivedData/ForkTikiLauncher-ghtzqyhxhnoemhcmazbbmdwwdane/Build/Products/Release/ForkTikiLauncher.app build/Release/ForkTikiLauncher.app
-        echo "Actualizado a v$VER. Cierra esta app y abre build/Release/ForkTikiLauncher.app"
+        cp -R "$HOME/Library/Developer/Xcode/DerivedData/ForkTikiLauncher-ghtzqyhxhnoemhcmazbbmdwwdane/Build/Products/Release/ForkTikiLauncher.app" build/Release/ForkTikiLauncher.app
+        echo "Listo, abriendo la app nueva…"
+        open build/Release/ForkTikiLauncher.app
+        EOS
+        chmod +x actualizar.sh
+        nohup ./actualizar.sh >/dev/null 2>&1 &
+        echo "ACTUALIZANDO_SOLA"
         """
         appendLog("$ Auto-actualizar launcher desde tikipro7/TikiLuncherMac\n")
         runCommand("/bin/sh", ["-c", script]) { code in
-            appUpdateStatus = code == 0 ? "Revisa el log: si había versión nueva, ya se recompiló en build/Release." : "No se pudo actualizar (código \(code)). Revisa el log."
+            if log.contains("ACTUALIZANDO_SOLA") {
+                appUpdateStatus = "Actualizando sola, la app se va a cerrar y se abre la nueva."
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    NSApplication.shared.terminate(nil)
+                }
+            } else {
+                appUpdateStatus = code == 0 ? "Ya estás en la última versión, o no se pudo leer GitHub. Revisa el log." : "No se pudo revisar (código \(code))."
+            }
         }
     }
 
