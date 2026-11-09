@@ -2,7 +2,13 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v9 (9 nov 2026)
+// ForkTikiLauncher — v10 (9 nov 2026)
+// v10: AUTO-ACTUALIZACION. Al abrir la app, sola consulta tu GitHub
+// tikipro7/TikiLuncherMac; si el README dice una version mayor que v10,
+// baja sola el App.swift nuevo, lo copia a Sources, recompila con
+// xcodegen + xcodebuild y deja la app nueva en build/Release. Solo
+// tienes que cerrar esta app y abrir la nueva. Si no hay version nueva,
+// no hace nada. El boton manual hace lo mismo cuando lo tocas.
 // v9: el launcher se revisa a si mismo en tu GitHub tikipro7/TikiLuncherMac:
 // boton "Revisar si hay version nueva del launcher" consulta el README
 // en main y el ultimo commit; si hay una v10 o mas, baja el repo nuevo.
@@ -166,7 +172,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v9"
+    private let appVersion = "v10"
+    private let appVersionNumber = 10
     @State private var nupPath: String = ""
     @State private var extraPaths: [String] = []
     @State private var inputKind: String = "file"
@@ -287,10 +294,10 @@ struct ContentView: View {
                 Text("Solo 4 pasos: 1 Motor, 2 Juego, 3 Preset, 4 Compilar. Lo demás es opcional.")
                     .font(.callout).foregroundStyle(.secondary)
                 HStack {
-                    Button("Revisar si hay versión nueva del launcher") { checkAppUpdate() }
+                    Button("Revisar / actualizar launcher ahora") { checkAppUpdate() }
                     Text(appUpdateStatus).font(.callout).foregroundStyle(.secondary)
                 }
-                Text("Esto consulta tu GitHub tikipro7/TikiLuncherMac (README en main + último commit). Si el README dice una versión mayor que \(appVersion), baja el repo nuevo con git pull o Download ZIP y recompila el launcher.")
+                Text("Al abrir la app, sola consulta tu GitHub tikipro7/TikiLuncherMac. Si hay una versión mayor que \(appVersion), la baja y recompila sola, y te deja la app nueva en build/Release: solo cierra esta y abre la nueva. Si no hay nada nuevo, no hace nada.")
                     .font(.callout).foregroundStyle(.secondary)
 
                 Divider()
@@ -590,7 +597,7 @@ struct ContentView: View {
             .frame(minWidth: 640)
         }
         .frame(minWidth: 680, minHeight: 600)
-        .onAppear { refreshDisk() }
+        .onAppear { refreshDisk(); checkAppUpdate() }
     }
 
     // MARK: - Acciones
@@ -841,16 +848,34 @@ struct ContentView: View {
         }
     }
 
-    /// Revisa si hay una versión nueva del propio launcher en tu GitHub
-    /// tikipro7/TikiLuncherMac. No descarga ni instala nada solo:
-    /// muestra en el log la versión que dice el README en main y el
-    /// último commit. Si es mayor que appVersion, baja el repo y recompila.
+    /// Auto-actualización del propio launcher desde tu GitHub
+    /// tikipro7/TikiLuncherMac. Lee la versión del README en main;
+    /// si es mayor que appVersionNumber, baja solo el App.swift nuevo,
+    /// lo copia a Sources/ForkTikiLauncher/App.swift, corre xcodegen +
+    /// xcodebuild y copia la app nueva a build/Release. No puede
+    /// reemplazar la app que está corriendo, por eso al final te dice
+    /// que cierres esta y abras la nueva. Si no hay versión nueva,
+    /// no toca nada. Si el build falla, la app vieja sigue intacta.
     private func checkAppUpdate() {
         appUpdateStatus = "Revisando tu GitHub…"
-        let script = "echo '--- TikiLuncherMac en GitHub ---'; curl -s https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/README.md | grep -m1 'ForkTikiLauncher v' || echo 'No se pudo leer el README'; curl -s 'https://api.github.com/repos/tikipro7/TikiLuncherMac/commits?per_page=1' | grep -m1 '\"sha\"' || echo 'No se pudo leer commits'"
-        appendLog("$ Revisar versión del launcher en tikipro7/TikiLuncherMac\n")
+        let script = """
+        set -x
+        cd "\(baseDir.path)"
+        VER=$(curl -s https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/README.md | grep -m1 -o 'ForkTikiLauncher v[0-9]*' | grep -o '[0-9]*')
+        echo "Versión en GitHub: v$VER, esta app: \(appVersion)"
+        if [ -z "$VER" ]; then echo "No se pudo leer GitHub, no se actualiza."; exit 0; fi
+        if [ "$VER" -le \(appVersionNumber) ]; then echo "Ya estás en la última versión."; exit 0; fi
+        echo "Hay versión nueva v$VER, actualizando sola…"
+        curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/Sources/ForkTikiLauncher/App.swift -o Sources/ForkTikiLauncher/App.swift
+        curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/project.yml -o project.yml
+        xcodegen generate
+        xcodebuild -project ForkTikiLauncher.xcodeproj -scheme ForkTikiLauncher -configuration Release build
+        cp -R /Users/tiki/Library/Developer/Xcode/DerivedData/ForkTikiLauncher-ghtzqyhxhnoemhcmazbbmdwwdane/Build/Products/Release/ForkTikiLauncher.app build/Release/ForkTikiLauncher.app
+        echo "Actualizado a v$VER. Cierra esta app y abre build/Release/ForkTikiLauncher.app"
+        """
+        appendLog("$ Auto-actualizar launcher desde tikipro7/TikiLuncherMac\n")
         runCommand("/bin/sh", ["-c", script]) { code in
-            appUpdateStatus = code == 0 ? "Revisa el log: si el README dice una versión mayor que \(appVersion), actualiza el launcher." : "No se pudo revisar (código \(code))."
+            appUpdateStatus = code == 0 ? "Revisa el log: si había versión nueva, ya se recompiló en build/Release." : "No se pudo actualizar (código \(code)). Revisa el log."
         }
     }
 

@@ -1,3 +1,7 @@
+# PASOS — ForkTikiLauncher v10
+
+v10: auto-actualización al abrir la app, desde tikipro7/TikiLuncherMac. Si hay versión nueva, baja el App.swift, recompila sola y deja la app nueva en build/Release.
+
 # PASOS — ForkTikiLauncher v9
 
 v9: botón arriba para revisar si hay versión nueva del launcher en tikipro7/TikiLuncherMac, y el build aplica primero el parche de memoria tiki-v22-mem.patch antes del cherry-pick.
