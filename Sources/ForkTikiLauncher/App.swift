@@ -2,7 +2,12 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v13 (9 nov 2026)
+// ForkTikiLauncher — v14 (9 nov 2026)
+// v14: la app RECONOCE tu juego sola. Al elegir el juego (o poner su
+// Title ID), te dice en una tarjeta verde: hay fork para este juego,
+// cual es, y que mejora se le puede aplicar al compilar. Un boton
+// "Usar este fork" lo elige y lo clona solo. Si no hay fork especifico,
+// te dice que si hay optimizacion universal Switch 2 aplicable.
 // v13: auto-actualizacion DE VERDAD. La v10-v12 fallaba porque intentaba
 // reemplazar la app mientras estaba corriendo, y macOS no deja. Ahora,
 // si hay version nueva, la app escribe un actualizador aparte,
@@ -89,7 +94,15 @@ let defaultForks: [Fork] = [
     Fork(id: "nxnative",
          name: "nxnative upstream (otros juegos)",
          repo: "https://github.com/seedds/nxnative.git",
-         folder: "nxnative")
+         folder: "nxnative"),
+    Fork(id: "horizon-nx2",
+         name: "horizon-nx2 (Bananza / Pokopia / Mario Kart)",
+         repo: "https://github.com/joaoalvess/horizon-nx2.git",
+         folder: "horizon-nx2"),
+    Fork(id: "pokopia-native",
+         name: "pokopia-native (Pokopia)",
+         repo: "https://github.com/joaoalvess/pokopia-native.git",
+         folder: "pokopia-native")
 ]
 
 struct Game: Identifiable, Hashable {
@@ -101,8 +114,23 @@ struct Game: Identifiable, Hashable {
 let games: [Game] = [
     Game(id: "oot", name: "Ocarina of Time (Switch 2)", titleId: "0400486024DEC000"),
     Game(id: "dkb", name: "Donkey Kong Bananza (Switch 2)", titleId: "040074A01BF12000"),
+    Game(id: "pkp", name: "Pokémon Pokopia (Switch 2)", titleId: "0400A3A01EE4C000"),
     Game(id: "other", name: "Otro juego (manual)", titleId: ""),
 ]
+
+/// ¿Hay fork / mejora para este Title ID? La app lo reconoce sola.
+func recommendedFork(for titleId: String) -> (forkId: String, text: String) {
+    switch titleId.uppercased() {
+    case "0400486024DEC000":
+        return ("kid-with-sword", "✅ Hay fork para Ocarina: kid V22 + mejoras tiki. Arregla la primera nota de ocarina y devuelve 1.84 GB de memoria. Es el mejor para este juego.")
+    case "040074A01BF12000":
+        return ("horizon-nx2", "✅ Hay fork para Bananza: horizon-nx2. No tiene releases, solo perfil, y solo está probado el primer nivel. También se le puede aplicar la optimización universal Switch 2.")
+    case "0400A3A01EE4C000":
+        return ("pokopia-native", "⚠️ Hay fork para Pokopia: pokopia-native / horizon-nx2, pero el juego pide 9 GB de heap y en tu 15 Pro Max (8 GB) se cierra por memoria después de crear el personaje. No es un problema del fork.")
+    default:
+        return ("nxnative", "ℹ️ No hay un fork específico conocido para este juego. Sí se le puede aplicar la optimización universal Switch 2 (tex_release 2, Potato, Metal 4).")
+    }
+}
 
 // Sin preset por defecto (Luis lo agrega afuera). El preset V22
 // sigue en la lista por si lo quiere elegir.
@@ -189,8 +217,9 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v13"
-    private let appVersionNumber = 13
+    private let appVersion = "v14"
+    private let appVersionNumber = 14
+    @State private var forkRecommendation: String = recommendedFork(for: "0400486024DEC000").text
     @State private var forkSearchText: String = ""
     @State private var forkSearchStatus: String = ""
     @State private var universalOptStatus: String = ""
@@ -256,6 +285,23 @@ struct ContentView: View {
         // Al cambiar de juego, los valores se ponen en lo más óptimo para M1 + 15 Pro Max.
         selectedPreset = optimalPreset(for: game)
         status = "Juego: \(game.name). Preset óptimo: \(selectedPreset.name)."
+        // La app reconoce el juego sola y te dice si hay fork / mejora.
+        let rec = recommendedFork(for: game.titleId)
+        forkRecommendation = rec.text
+        if let fork = forks.first(where: { $0.id == rec.forkId }) {
+            selectedFork = fork
+        }
+    }
+
+    /// Botón "Usar este fork": elige el fork recomendado para el juego
+    /// actual y lo clona/actualiza solo, sin que lo busques a mano.
+    private func useRecommendedFork() {
+        let rec = recommendedFork(for: currentTitleId)
+        if let fork = forks.first(where: { $0.id == rec.forkId }) {
+            selectedFork = fork
+            forkRecommendation = rec.text
+            cloneOrUpdateFork()
+        }
     }
     private var spaceNote: String {
         romfsMode == "separate"
@@ -436,10 +482,37 @@ struct ContentView: View {
                 if selectedGame.id == "other" {
                     TextField("Title ID manual, ej. 0400486024DEC000", text: $customTitleId)
                         .textFieldStyle(.roundedBorder)
+                    Button("Reconocer este juego") {
+                        forkRecommendation = recommendedFork(for: currentTitleId).text
+                        if let fork = forks.first(where: { $0.id == recommendedFork(for: currentTitleId).forkId }) { selectedFork = fork }
+                    }
+                    .buttonStyle(.bordered)
                 } else {
                     Text("\(selectedGame.name) · \(selectedGame.titleId)")
                         .font(.callout)
                 }
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("La app reconoció tu juego", systemImage: "checkmark.seal.fill")
+                        .font(.headline)
+                    Text(forkRecommendation)
+                        .font(.callout)
+                    HStack {
+                        Button { useRecommendedFork() } label: {
+                            Label("Usar este fork", systemImage: "arrow.down.to.line")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Button { applyUniversalOptimization() } label: {
+                            Label("Aplicar mejora universal", systemImage: "wand.and.stars")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    Text("“Usar este fork” lo elige y lo descarga solo. “Aplicar mejora universal” le pone tex_release 2, Potato y Metal 4, para cualquier juego Switch 2.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.green.opacity(0.12))
+                .cornerRadius(12)
                 Text("Plataforma").font(.subheadline.bold())
                 HStack {
                     Button("Switch 2 (.nup, sin prod.keys)") { gamePlatform = "sw2" }
