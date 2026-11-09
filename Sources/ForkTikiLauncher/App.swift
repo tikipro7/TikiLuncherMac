@@ -2,7 +2,16 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v19 (9 nov 2026)
+// ForkTikiLauncher — v20 (9 nov 2026)
+// v20: errores encontrados en revision. 1) Picker de Fork: si el fork
+// elegido no estaba en la lista filtrada 'solo el mejor', el Picker
+// quedaba en blanco. Ahora siempre incluye el fork elegido. 2) Cargar
+// todos los forks usaba /opt/homebrew/bin/python3.12, que no existe en
+// otras Macs; ahora usa python3. 3) Auto-actualizar dependia de
+// log.contains('ACTUALIZANDO_SOLA'), pero appendLog es async y a veces
+// no estaba en el log cuando se revisaba; ahora usa un archivo marcador
+// /tmp/tiki-update-marker. 4) La barra de progreso confundia '[RED]'
+// con un paso [x/6]; ahora solo acepta [numero/numero].
 // v19: nombres de forks TRADUCIDOS al espanol claro, y solo el mas
 // actualizado. Por defecto solo se muestra el fork recomendado para
 // tu juego (el mas nuevo / mejor), no una lista larga en ingles.
@@ -248,8 +257,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v19"
-    private let appVersionNumber = 19
+    private let appVersion = "v20"
+    private let appVersionNumber = 20
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -597,7 +606,7 @@ struct ContentView: View {
                 Toggle("Solo el mejor fork (el más actualizado)", isOn: $onlyBestFork)
                 Text("Prendido: solo te muestro el mejor fork para tu juego, en español claro. Apagado: te muestro todos los forks de GitHub.").font(.callout).foregroundStyle(.secondary)
                 Picker("Fork", selection: $selectedFork) {
-                    ForEach(onlyBestFork ? forks.filter { $0.id == recommendedFork(for: currentTitleId).forkId || $0.id == "nxnative" } : forks) { fork in
+                    ForEach(onlyBestFork ? forks.filter { $0.id == recommendedFork(for: currentTitleId).forkId || $0.id == "nxnative" || $0.id == selectedFork.id } : forks) { fork in
                         Text(fork.name).tag(fork)
                     }
                 }
@@ -1016,8 +1025,10 @@ struct ContentView: View {
            let close = text[open...].firstIndex(of: "]") {
             let inside = String(text[text.index(after: open)..<close])
             let parts = inside.split(separator: "/")
+            // Solo [numero/numero], no [RED] ni otros corchetes del log.
             if parts.count == 2,
-               let step = Double(parts[0]), let total = Double(parts[1]), total > 0 {
+               let step = Double(parts[0]), let total = Double(parts[1]), total > 0,
+               parts[0].allSatisfy({ $0.isNumber }), parts[1].allSatisfy({ $0.isNumber }) {
                 let stepName = text[close...].trimmingCharacters(in: .whitespacesAndNewlines)
                     .split(separator: " ").first.map(String.init) ?? ""
                 buildStepText = "Paso \(Int(step)) de \(Int(total))" + (stepName.isEmpty ? "" : " · \(stepName)")
@@ -1107,7 +1118,7 @@ struct ContentView: View {
     private func loadAllForksFromGitHub() {
         allForksStatus = "Cargando todos los forks de GitHub…"
         let jsonURL = baseDir.appendingPathComponent("forks.json")
-        let script = "curl -s 'https://api.github.com/repos/seedds/nxnative/forks?per_page=100' -o /tmp/forks1.json; curl -s 'https://api.github.com/repos/cheemu21/kid-with-sword-remake/forks?per_page=100' -o /tmp/forks2.json; /opt/homebrew/bin/python3.12 -c \"import json; a=json.load(open('/tmp/forks1.json')); b=json.load(open('/tmp/forks2.json')); json.dump(a+b, open('\(jsonURL.path)','w'))\" || echo 'No se pudo cargar GitHub'"
+        let script = "curl -s 'https://api.github.com/repos/seedds/nxnative/forks?per_page=100' -o /tmp/forks1.json; curl -s 'https://api.github.com/repos/cheemu21/kid-with-sword-remake/forks?per_page=100' -o /tmp/forks2.json; python3 -c \"import json; a=json.load(open('/tmp/forks1.json')); b=json.load(open('/tmp/forks2.json')); json.dump(a+b, open('\(jsonURL.path)','w'))\" || echo 'No se pudo cargar GitHub'"
         appendLog("$ Cargar todos los forks de GitHub\n")
         runCommand("/bin/sh", ["-c", script]) { code in
             guard let data = try? Data(contentsOf: jsonURL),
@@ -1223,10 +1234,12 @@ struct ContentView: View {
         chmod +x actualizar.sh
         nohup ./actualizar.sh >/dev/null 2>&1 &
         echo "ACTUALIZANDO_SOLA"
+        touch /tmp/tiki-update-marker
         """
         appendLog("$ Auto-actualizar launcher desde tikipro7/TikiLuncherMac\n")
         runCommand("/bin/sh", ["-c", script]) { code in
-            if log.contains("ACTUALIZANDO_SOLA") {
+            if FileManager.default.fileExists(atPath: "/tmp/tiki-update-marker") {
+                try? FileManager.default.removeItem(atPath: "/tmp/tiki-update-marker")
                 appUpdateStatus = "Actualizando sola, la app se va a cerrar y se abre la nueva."
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                     NSApplication.shared.terminate(nil)
