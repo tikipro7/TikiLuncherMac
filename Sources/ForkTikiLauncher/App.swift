@@ -2,7 +2,11 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v18 (9 nov 2026)
+// ForkTikiLauncher — v19 (9 nov 2026)
+// v19: nombres de forks TRADUCIDOS al espanol claro, y solo el mas
+// actualizado. Por defecto solo se muestra el fork recomendado para
+// tu juego (el mas nuevo / mejor), no una lista larga en ingles.
+// Si quieres ver todos, apaga el toggle 'Solo el mejor fork'.
 // v18: TODO mas entendible para quien la usa por primera vez.
 // Tarjeta de bienvenida arriba con 3 pasos en palabras simples,
 // modo principiante que esconde lo avanzado (Python, prod.keys manual,
@@ -115,19 +119,19 @@ struct Preset: Identifiable, Hashable {
 
 let defaultForks: [Fork] = [
     Fork(id: "kid-with-sword",
-         name: "kid-with-sword-remake (Ocarina)",
+         name: "Ocarina optimizado — kid V22 (el mejor para Ocarina)",
          repo: "https://github.com/cheemu21/kid-with-sword-remake.git",
          folder: "kid-with-sword-remake"),
     Fork(id: "nxnative",
-         name: "nxnative upstream (otros juegos)",
+         name: "Motor original — sin arreglos (para otros juegos)",
          repo: "https://github.com/seedds/nxnative.git",
          folder: "nxnative"),
     Fork(id: "horizon-nx2",
-         name: "horizon-nx2 (Bananza / Pokopia / Mario Kart)",
+         name: "Bananza / Pokopia / Mario Kart — horizon-nx2",
          repo: "https://github.com/joaoalvess/horizon-nx2.git",
          folder: "horizon-nx2"),
     Fork(id: "pokopia-native",
-         name: "pokopia-native (Pokopia)",
+         name: "Pokopia optimizado — pokopia-native",
          repo: "https://github.com/joaoalvess/pokopia-native.git",
          folder: "pokopia-native")
 ]
@@ -244,8 +248,9 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v18"
-    private let appVersionNumber = 18
+    private let appVersion = "v19"
+    private let appVersionNumber = 19
+    @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
     @State private var allForksStatus: String = ""
@@ -588,9 +593,11 @@ struct ContentView: View {
                 }
 
                 Divider()
-                stepTitle(number: "•", icon: "tuningfork", title: "Fork: la versión optimizada", subtitle: "Solo si elegiste Optimizado. Es el motor con arreglos para Ocarina.")
+                stepTitle(number: "•", icon: "tuningfork", title: "Fork: la versión optimizada", subtitle: "Solo si elegiste Optimizado. Es el motor con arreglos para tu juego.")
+                Toggle("Solo el mejor fork (el más actualizado)", isOn: $onlyBestFork)
+                Text("Prendido: solo te muestro el mejor fork para tu juego, en español claro. Apagado: te muestro todos los forks de GitHub.").font(.callout).foregroundStyle(.secondary)
                 Picker("Fork", selection: $selectedFork) {
-                    ForEach(forks) { fork in
+                    ForEach(onlyBestFork ? forks.filter { $0.id == recommendedFork(for: currentTitleId).forkId || $0.id == "nxnative" } : forks) { fork in
                         Text(fork.name).tag(fork)
                     }
                 }
