@@ -2,7 +2,17 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v16 (9 nov 2026)
+// ForkTikiLauncher — v18 (9 nov 2026)
+// v18: TODO mas entendible para quien la usa por primera vez.
+// Tarjeta de bienvenida arriba con 3 pasos en palabras simples,
+// modo principiante que esconde lo avanzado (Python, prod.keys manual,
+// forks avanzados), textos cortos sin tecnicismos, y cada seccion
+// con un 'Que es esto?' desplegable. Incluye el arreglo v17 de
+// xcodegen en segundo plano (PATH de Homebrew).
+// v17: ARREGLO xcodegen not found. El actualizador corria en segundo
+// plano sin el PATH de Homebrew, y xcodegen no se encontraba, por eso
+// el build se interrumpia. Ahora exporta PATH con /opt/homebrew/bin
+// y usa /opt/homebrew/bin/xcodegen con ruta completa.
 // v16: ARREGLO DEL BUCLE. La v15 se cerraba y abria en bucle porque el
 // parseo de la version con grep -o '[0-9]*' devolvia vacio y siempre
 // creia que habia version nueva. Ahora usa grep -oE 'v[0-9]+', y la
@@ -234,8 +244,10 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v16"
-    private let appVersionNumber = 16
+    private let appVersion = "v18"
+    private let appVersionNumber = 18
+    @State private var showWelcome: Bool = true
+    @State private var beginnerMode: Bool = true
     @State private var allForksStatus: String = ""
     @State private var forkRecommendation: String = recommendedFork(for: "0400486024DEC000").text
     @State private var forkSearchText: String = ""
@@ -427,6 +439,25 @@ struct ContentView: View {
                 .background(Color.orange.opacity(0.12))
                 .cornerRadius(16)
 
+                if showWelcome {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("¿Primera vez aquí? Empieza aquí 👇", systemImage: "hand.wave.fill").font(.headline)
+                        Text("1️⃣ Elige tu juego abajo, en el Paso 2.").font(.callout)
+                        Text("2️⃣ La app te dice sola si hay una versión mejorada para ese juego.").font(.callout)
+                        Text("3️⃣ Dale al botón verde COMPILAR y espera. Tarda unas 2 horas, no cierres la app.").font(.callout)
+                        Text("No necesitas saber qué es un fork, un perfil o un shader. La app lo elige por ti. Si algo te suena raro, toca “¿Qué es esto?”").font(.callout).foregroundStyle(.secondary)
+                        HStack {
+                            Button("Entendido, empezar") { showWelcome = false }
+                                .buttonStyle(.borderedProminent)
+                            Toggle("Modo principiante", isOn: $beginnerMode)
+                        }
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.blue.opacity(0.12))
+                    .cornerRadius(14)
+                }
+
                 card(stepTitle(number: "1", icon: "cpu.fill", title: "Motor: ¿rápido o optimizado?", subtitle: "El motor es lo que convierte tu juego a iPhone o Mac."))
                 HStack {
                     Button { selectedEngine = "nxnative" } label: {
@@ -439,6 +470,9 @@ struct ContentView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(selectedEngine == "s2arm" ? .orange : .gray)
+                }
+                DisclosureGroup("¿Qué es esto?") {
+                    Text("El motor es el programa que convierte tu juego de Switch a iPhone o Mac. “Optimizado” es más lento de construir pero corre mejor. “Rápido” construye en minutos pero sin arreglos especiales. Si no sabes, deja Optimizado.").font(.callout).foregroundStyle(.secondary)
                 }
                 if selectedEngine == "s2arm" {
                     Text("S2Arm headless, sin instalar S2Arm.app y sin abrir su ventana. Usa pack/oneclick/oneclick.sh del repo copiado en engines/s2arm. ForkTikiLauncher lo corre directo, te da IPA + paquete de recursos.")
@@ -729,10 +763,12 @@ struct ContentView: View {
                 .padding(8)
                 .background(Color(nsColor: .textBackgroundColor))
                 .cornerRadius(6)
-                HStack {
-                    Text("Python:").font(.callout)
-                    TextField("/opt/homebrew/bin/python3.12", text: $pythonPath)
-                        .textFieldStyle(.roundedBorder)
+                if !beginnerMode {
+                    HStack {
+                        Text("Python:").font(.callout)
+                        TextField("/opt/homebrew/bin/python3.12", text: $pythonPath)
+                            .textFieldStyle(.roundedBorder)
+                    }
                 }
                 Text("El fork recomienda Python 3.15; con 3.12 ocupa backports.zstd (ya lo tienes).")
                     .font(.callout).foregroundStyle(.secondary)
@@ -1167,10 +1203,11 @@ struct ContentView: View {
         sleep 3
         cd "$HOME/ForkTikiLauncher" || exit 1
         exec >> actualizar.log 2>&1
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
         echo "Actualizando a la versión nueva…"
         curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/Sources/ForkTikiLauncher/App.swift -o Sources/ForkTikiLauncher/App.swift
         curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/project.yml -o project.yml
-        xcodegen generate
+        /opt/homebrew/bin/xcodegen generate
         xcodebuild -project ForkTikiLauncher.xcodeproj -scheme ForkTikiLauncher -configuration Release build
         cp -R "$HOME/Library/Developer/Xcode/DerivedData/ForkTikiLauncher-ghtzqyhxhnoemhcmazbbmdwwdane/Build/Products/Release/ForkTikiLauncher.app" build/Release/ForkTikiLauncher.app
         echo "Listo, abriendo la app nueva…"

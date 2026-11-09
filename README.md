@@ -1,8 +1,16 @@
 # TikiLuncherMac
 
-ForkTikiLauncher v16 para Mac + fork tiki-v22 de Ocarina of Time.
+ForkTikiLauncher v18 para Mac + fork tiki-v22 de Ocarina of Time.
 
 Launcher SwiftUI para Mac que construye juegos de Switch / Switch 2 a IPA para iPhone (AltStore Classic) o a .app para Mac, con nxnative / NX2Apple, con selector de fork, presets y descarga de herramientas. Todo desde el launcher, sin abrir otra app.
+
+## Que trae la v18
+
+- **v18: todo más entendible para quien la usa por primera vez.** Tarjeta de bienvenida con 3 pasos simples, modo principiante que esconde lo avanzado, y “¿Qué es esto?” en cada sección. Incluye el arreglo v17 de xcodegen en segundo plano.
+
+## Que trae la v17
+
+- **v17: arreglo `xcodegen: command not found`.** El actualizador en segundo plano no tenía el PATH de Homebrew. Ahora exporta `/opt/homebrew/bin` y usa xcodegen con ruta completa.
 
 ## Que trae la v16
 
