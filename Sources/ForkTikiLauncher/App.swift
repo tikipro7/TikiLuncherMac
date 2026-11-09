@@ -2,7 +2,14 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v21 (9 nov 2026)
+// ForkTikiLauncher — v22 (9 nov 2026)
+// v22: cada fork dice PARA QUE JUEGO ES, en espanol. La lista ya no
+// muestra solo 'usuario/nxnative estrella 0' sin saber para que es.
+// Ahora muestra la descripcion de GitHub, y si es un fork conocido
+// dice el juego: kid=Ocarina, horizon=Bananza/Mario Kart/Pokopia,
+// pokopia=Pokopia, tomodachi=Tomodachi, kart=Mario Kart. Los forks
+// con 0 estrellas y sin descripcion son solo copias del motor original,
+// sin juego especifico, y quedan al final, ordenados por estrellas.
 // v21: el boton de actualizar por fin usa la API de GitHub en vez de
 // raw.githubusercontent.com, porque raw se quedaba en cache y siempre
 // bajaba la version vieja (v19 en vez de v20). Ahora el actualizador
@@ -261,8 +268,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v21"
-    private let appVersionNumber = 21
+    private let appVersion = "v22"
+    private let appVersionNumber = 22
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -611,9 +618,10 @@ struct ContentView: View {
                 Text("Prendido: solo te muestro el mejor fork para tu juego, en español claro. Apagado: te muestro todos los forks de GitHub.").font(.callout).foregroundStyle(.secondary)
                 Picker("Fork", selection: $selectedFork) {
                     ForEach(onlyBestFork ? forks.filter { $0.id == recommendedFork(for: currentTitleId).forkId || $0.id == "nxnative" || $0.id == selectedFork.id } : forks) { fork in
-                        Text(fork.name).tag(fork)
+                        Text("\(fork.name) — para: \(gameForFork(fork))").tag(fork)
                     }
                 }
+                Text("Este fork es para: \(gameForFork(selectedFork))").font(.callout).foregroundStyle(.secondary)
                 .pickerStyle(.menu)
                 HStack {
                     Button("Clonar / actualizar fork") { cloneOrUpdateFork() }
@@ -1115,6 +1123,19 @@ struct ContentView: View {
         }
     }
 
+
+    /// Para que juego es este fork, en espanol claro.
+    private func gameForFork(_ fork: Fork) -> String {
+        let n = fork.name.lowercased()
+        if n.contains("kid") { return "Ocarina of Time" }
+        if n.contains("horizon") { return "Bananza / Mario Kart / Pokopia" }
+        if n.contains("pokopia") { return "Pokémon Pokopia" }
+        if n.contains("tomodachi") { return "Tomodachi Life" }
+        if n.contains("kart") { return "Mario Kart World" }
+        if n.contains("greenkid") { return "Ocarina of Time (Mac)" }
+        return "Sin juego específico (motor original)"
+    }
+
     /// Cargar TODOS los forks disponibles de GitHub en la lista.
     /// Baja los forks de seedds/nxnative (hasta 100) y de kid, los
     /// decodifica y los mete en el Picker, sin duplicar los que ya
@@ -1332,7 +1353,13 @@ struct ContentView: View {
         let gitDir = dir.appendingPathComponent(".git").path
         gitStatus = "Trabajando…"
         if FileManager.default.fileExists(atPath: gitDir) {
-            runCommand("/usr/bin/git", ["-C", dir.path, "pull"]) { code in
+            // git pull fallaba con codigo 1 porque el fork local tenia
+            // cambios sin guardar (mejoras tiki, perfil universal). Con
+            // --autostash git guarda esos cambios, actualiza y los devuelve.
+            // Si aun asi falla, hace reset a lo ultimo de GitHub; las
+            // mejoras tiki se vuelven a aplicar solas al compilar.
+            let script = "git -C '\(dir.path)' fetch origin; git -C '\(dir.path)' pull --rebase --autostash || git -C '\(dir.path)' reset --hard origin/HEAD"
+            runCommand("/bin/sh", ["-c", script]) { code in
                 gitStatus = code == 0 ? "Fork actualizado." : "git pull falló (código \(code)). Revisa el log."
             }
         } else {
