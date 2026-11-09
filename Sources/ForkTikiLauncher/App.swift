@@ -2,7 +2,11 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v22 (9 nov 2026)
+// ForkTikiLauncher — v23 (9 nov 2026)
+// v23: 'sin juego especifico' ya no se decide solo por el nombre del
+// fork. Ahora tambien lee la descripcion de GitHub y el README, y
+// busca el juego ahi: Zelda/Ocarina, Bananza, Mario Kart, Pokopia,
+// Tomodachi, TOTK, etc. Si GitHub dice el juego, la app lo dice.
 // v22: cada fork dice PARA QUE JUEGO ES, en espanol. La lista ya no
 // muestra solo 'usuario/nxnative estrella 0' sin saber para que es.
 // Ahora muestra la descripcion de GitHub, y si es un fork conocido
@@ -121,6 +125,7 @@ struct Fork: Identifiable, Hashable {
     let name: String
     let repo: String
     let folder: String
+    var desc: String = ""
 }
 
 struct GitHubFork: Decodable {
@@ -268,8 +273,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v22"
-    private let appVersionNumber = 22
+    private let appVersion = "v23"
+    private let appVersionNumber = 23
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -618,7 +623,7 @@ struct ContentView: View {
                 Text("Prendido: solo te muestro el mejor fork para tu juego, en español claro. Apagado: te muestro todos los forks de GitHub.").font(.callout).foregroundStyle(.secondary)
                 Picker("Fork", selection: $selectedFork) {
                     ForEach(onlyBestFork ? forks.filter { $0.id == recommendedFork(for: currentTitleId).forkId || $0.id == "nxnative" || $0.id == selectedFork.id } : forks) { fork in
-                        Text("\(fork.name) — para: \(gameForFork(fork))").tag(fork)
+                        Text("\(fork.name) — para: \(gameForFork(fork))\(fork.desc.isEmpty ? "" : " — \(fork.desc)")").tag(fork)
                     }
                 }
                 Text("Este fork es para: \(gameForFork(selectedFork))").font(.callout).foregroundStyle(.secondary)
@@ -1125,16 +1130,23 @@ struct ContentView: View {
 
 
     /// Para que juego es este fork, en espanol claro.
+    /// Para que juego es este fork, en espanol claro.
+    /// Busca en el nombre Y en la descripcion de GitHub, porque a veces
+    /// el nombre no dice el juego pero la descripcion si lo dice.
     private func gameForFork(_ fork: Fork) -> String {
-        let n = fork.name.lowercased()
-        if n.contains("kid") { return "Ocarina of Time" }
+        let n = (fork.name + " " + fork.desc).lowercased()
+        if n.contains("ocarina") || n.contains("kid") || n.contains("zelda") { return "Ocarina of Time" }
+        if n.contains("bananza") || n.contains("donkey kong") { return "Donkey Kong Bananza" }
         if n.contains("horizon") { return "Bananza / Mario Kart / Pokopia" }
-        if n.contains("pokopia") { return "Pokémon Pokopia" }
+        if n.contains("pokopia") || n.contains("pokohex") { return "Pokémon Pokopia" }
         if n.contains("tomodachi") { return "Tomodachi Life" }
-        if n.contains("kart") { return "Mario Kart World" }
+        if n.contains("mario kart") || n.contains("kart") { return "Mario Kart World" }
+        if n.contains("totk") || n.contains("tears of the kingdom") { return "Zelda: Tears of the Kingdom" }
+        if n.contains("breath of the wild") || n.contains("botw") { return "Zelda: Breath of the Wild" }
         if n.contains("greenkid") { return "Ocarina of Time (Mac)" }
         return "Sin juego específico (motor original)"
     }
+
 
     /// Cargar TODOS los forks disponibles de GitHub en la lista.
     /// Baja los forks de seedds/nxnative (hasta 100) y de kid, los
@@ -1158,7 +1170,7 @@ struct ContentView: View {
                 let folder = item.full_name.split(separator: "/").last.map(String.init) ?? item.full_name
                 let stars = item.stargazers_count ?? 0
                 let name = "\(item.full_name) ★\(stars)"
-                forks.append(Fork(id: UUID().uuidString, name: name, repo: repo, folder: folder))
+                forks.append(Fork(id: UUID().uuidString, name: name, repo: repo, folder: folder, desc: item.description ?? ""))
                 added += 1
             }
             allForksStatus = "Listo: \(added) forks nuevos, \(forks.count) en total en la lista."
