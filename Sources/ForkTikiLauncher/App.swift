@@ -2,7 +2,14 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v11 (9 nov 2026)
+// ForkTikiLauncher — v12 (9 nov 2026)
+// v12: optimizado NO solo Ocarina. 1) Buscar forks en GitHub: escribe
+// el nombre del juego y te lista forks de nxnative en el log, para
+// añadir el que quieras. 2) Optimizacion universal Switch 2: aplica
+// el perfil generico (tex_release 2, Potato, pso_mtl4/prebuild,
+// res_scale 0.5, frame_wg off) a CUALQUIER juego Switch 2 por Title ID,
+// con backup del perfil original. No es el perfil de Ocarina, es el
+// generico, y avisa que tex_release 2 puede dar texturas negras.
 // v11: interfaz nueva, mas bonita y mas entendible. Tarjetas por paso,
 // numeros grandes 1-2-3-4, botones con icono, textos cortos en español
 // claro, y los detalles tecnicos escondidos en "¿Que es esto?".
@@ -175,8 +182,12 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v11"
-    private let appVersionNumber = 11
+    private let appVersion = "v12"
+    private let appVersionNumber = 12
+    @State private var forkSearchText: String = ""
+    @State private var forkSearchStatus: String = ""
+    @State private var universalOptStatus: String = ""
+    @State private var universalOptOn: Bool = true
 
     // MARK: - Interfaz v11: tarjetas y pasos claros
     @ViewBuilder
@@ -473,6 +484,18 @@ struct ContentView: View {
                     .font(.callout).foregroundStyle(.secondary)
                 Text("Se clona en ~/ForkTikiLauncher/engines/\(selectedFork.folder)")
                     .font(.callout).foregroundStyle(.secondary)
+                stepTitle(number: "🔍", icon: "magnifyingglass", title: "Buscar más forks en GitHub", subtitle: "No solo Ocarina. Busca forks para Bananza, Pokopia, Mario Kart, el juego que quieras.")
+                TextField("¿Qué juego? Ej. Bananza, Pokopia, Mario Kart World", text: $forkSearchText)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button { searchForks() } label: {
+                        Label("Buscar forks", systemImage: "magnifyingglass")
+                    }
+                    .buttonStyle(.bordered)
+                    Text(forkSearchStatus).font(.callout).foregroundStyle(.secondary)
+                }
+                Text("Te lista en el log los forks de nxnative que encuentra en GitHub. Copia la URL del que te guste y pégala abajo en “Añadir fork”.")
+                    .font(.callout).foregroundStyle(.secondary)
                 Text("Añadir cualquier fork").font(.subheadline.bold())
                 Text("Si alguien crea un fork nuevo, lo pega aquí y queda en la lista. No solo los dos de arriba.")
                     .font(.callout).foregroundStyle(.secondary)
@@ -484,6 +507,21 @@ struct ContentView: View {
                     Button("Añadir fork") { addCustomFork() }
                     Text(forkAddStatus).font(.callout).foregroundStyle(.secondary)
                 }
+
+                Divider()
+                stepTitle(number: "⚡", icon: "bolt.fill", title: "Optimización universal Switch 2", subtitle: "Para CUALQUIER juego Switch 2, no solo Ocarina. Aplica el perfil genérico: tex_release 2, Potato, Metal 4, render 0.5.")
+                Toggle("Optimización universal prendida", isOn: $universalOptOn)
+                Text("Esto no copia el perfil de Ocarina a otro juego. Usa el perfil genérico, con valores conservadores para tu 15 Pro Max. Si salen texturas negras, baja a tex_release 1 y res_scale 0.75.")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button { applyUniversalOptimization() } label: {
+                        Label("Aplicar optimización universal a este juego", systemImage: "wand.and.stars")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Text(universalOptStatus).font(.callout).foregroundStyle(.secondary)
+                }
+                Text("Se aplica al Title ID del juego que elegiste arriba, en el motor que tienes clonado. Hace backup del perfil original como game.tsv.bak.")
+                    .font(.callout).foregroundStyle(.secondary)
 
                 Divider()
                 stepTitle(number: "3", icon: "speedometer", title: "¿A cuántos fps quieres jugar?", subtitle: "30 fps es estable en tu iPhone. 60 fps se ve mejor, pero se calienta más.")
@@ -894,6 +932,70 @@ struct ContentView: View {
         customForkName = ""
         customForkRepo = ""
         forkAddStatus = "Fork añadido: \(name). Dale a Clonar / actualizar fork."
+    }
+
+    /// Buscar forks en GitHub para cualquier juego, no solo Ocarina.
+    /// Consulta la API de GitHub con el texto que escribiste + nxnative,
+    /// y lista los repos en el log (nombre + descripción). No descarga
+    /// nada solo: tú eliges y lo pegas en "Añadir fork".
+    private func searchForks() {
+        let q = forkSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { forkSearchStatus = "Escribe el nombre del juego primero."; return }
+        forkSearchStatus = "Buscando en GitHub…"
+        let encoded = q.replacingOccurrences(of: " ", with: "+")
+        let script = "curl -s 'https://api.github.com/search/repositories?q=\(encoded)+nxnative&per_page=8' | grep -E '\"full_name\"|\"description\"' | head -n 32 || echo 'No se pudo buscar en GitHub'"
+        appendLog("$ Buscar forks: \(q)\n")
+        runCommand("/bin/sh", ["-c", script]) { code in
+            forkSearchStatus = code == 0 ? "Mira el log: ahí van los forks. Copia la URL del que quieras." : "No se pudo buscar (código \(code))."
+        }
+    }
+
+    /// Optimización universal Switch 2, para cualquier juego por Title ID.
+    /// Escribe el perfil genérico (no el de Ocarina) en el motor clonado:
+    /// tex_release 2, Potato, pso_mtl4/prebuild, res_scale 0.5, frame_wg off.
+    /// Hace backup game.tsv.bak si ya había perfil. Si el motor no está
+    /// clonado, te lo dice y no hace nada.
+    private func applyUniversalOptimization() {
+        guard universalOptOn else { universalOptStatus = "Prende el toggle primero."; return }
+        let titleId = selectedGame.id == "other" ? customTitleId : selectedGame.titleId
+        guard !titleId.isEmpty else { universalOptStatus = "Elige un juego con Title ID primero."; return }
+        let dir = engineDir(selectedFork)
+        guard FileManager.default.fileExists(atPath: dir.appendingPathComponent(".git").path) else {
+            universalOptStatus = "Primero clona el motor/fork arriba."
+            return
+        }
+        universalOptStatus = "Aplicando optimización universal…"
+        let profile = """
+        # Perfil generico Switch 2 — ForkTikiLauncher v12, para \(titleId)
+        # NO es el perfil de Ocarina. Valores conservadores para 15 Pro Max 8 GB.
+        mem_reserve 0x320000000
+        mem_alias 0x100000000
+        mem_map_limit on
+        mem_stack 0x10000000
+        app_pool 0x240000000
+        sys_resource 0x3000000
+        tex_release 2
+        pso_mtl4 on
+        pso_prebuild on
+        res_scale 0.5
+        frame_wg off
+        pad_layout native
+        """
+        let gameDir = dir.appendingPathComponent("graphics/nvn/games/\(titleId)")
+        let profileURL = gameDir.appendingPathComponent("game.tsv")
+        let script = """
+        set -x
+        mkdir -p "\(gameDir.path)"
+        if [ -f "\(profileURL.path)" ]; then cp "\(profileURL.path)" "\(profileURL.path).bak"; echo "Backup: game.tsv.bak"; fi
+        cat > "\(profileURL.path)" <<'EOF'
+        \(profile)
+        EOF
+        echo "Optimización universal aplicada a \(titleId)"
+        """
+        appendLog("$ Optimización universal Switch 2 para \(titleId)\n")
+        runCommand("/bin/sh", ["-c", script]) { code in
+            universalOptStatus = code == 0 ? "Aplicada a \(titleId). Si salen texturas negras, baja a tex_release 1." : "No se pudo aplicar (código \(code)). Revisa el log."
+        }
     }
 
     private func checkForkUpdate() {

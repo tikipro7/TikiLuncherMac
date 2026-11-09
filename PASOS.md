@@ -1,3 +1,7 @@
+# PASOS — ForkTikiLauncher v12
+
+v12: buscar forks para cualquier juego, y optimización universal Switch 2 para cualquier Title ID.
+
 # PASOS — ForkTikiLauncher v11
 
 v11: interfaz nueva con tarjetas por paso, números 1-2-3-4, botón verde grande para Compilar, y textos cortos.
