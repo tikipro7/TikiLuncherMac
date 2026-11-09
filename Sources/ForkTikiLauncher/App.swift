@@ -2,7 +2,12 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v15 (9 nov 2026)
+// ForkTikiLauncher — v16 (9 nov 2026)
+// v16: ARREGLO DEL BUCLE. La v15 se cerraba y abria en bucle porque el
+// parseo de la version con grep -o '[0-9]*' devolvia vacio y siempre
+// creia que habia version nueva. Ahora usa grep -oE 'v[0-9]+', y la
+// auto-actualizacion al abrir YA NO corre sola: solo cuando le das
+// al boton. Asi no se vuelve a cerrar sola en bucle.
 // v15: en Fork ya salen TODOS los disponibles de GitHub, no solo 4.
 // Boton "Cargar todos los forks de GitHub": consulta los forks de
 // seedds/nxnative en la API de GitHub (hasta 100), los mete en la
@@ -229,8 +234,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v15"
-    private let appVersionNumber = 15
+    private let appVersion = "v16"
+    private let appVersionNumber = 16
     @State private var allForksStatus: String = ""
     @State private var forkRecommendation: String = recommendedFork(for: "0400486024DEC000").text
     @State private var forkSearchText: String = ""
@@ -794,7 +799,7 @@ struct ContentView: View {
             .frame(minWidth: 640)
         }
         .frame(minWidth: 680, minHeight: 600)
-        .onAppear { refreshDisk(); checkAppUpdate() }
+        .onAppear { refreshDisk() }
     }
 
     // MARK: - Acciones
@@ -1152,7 +1157,7 @@ struct ContentView: View {
         let script = """
         set -x
         cd "\(baseDir.path)"
-        VER=$(curl -s https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/README.md | grep -m1 -o 'ForkTikiLauncher v[0-9]*' | grep -o '[0-9]*')
+        VER=$(curl -s https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/README.md | grep -m1 -oE 'ForkTikiLauncher v[0-9]+' | grep -oE '[0-9]+')
         echo "Versión en GitHub: v$VER, esta app: \(appVersion)"
         if [ -z "$VER" ]; then echo "No se pudo leer GitHub, no se actualiza."; exit 0; fi
         if [ "$VER" -le \(appVersionNumber) ]; then echo "Ya estás en la última versión."; exit 0; fi
