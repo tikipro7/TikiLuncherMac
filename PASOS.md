@@ -1,7 +1,11 @@
+# PASOS — ForkTikiLauncher v9
+
+v9: botón arriba para revisar si hay versión nueva del launcher en tikipro7/TikiLuncherMac, y el build aplica primero el parche de memoria tiki-v22-mem.patch antes del cherry-pick.
+
 # ForkTikiLauncher — pasos desde Terminal
 
 App de Mac (SwiftUI) para compilar juegos de Switch con forks y presets,
-sin acordarte de los comandos. v8 (9 nov 2026): mejoras tiki aplicadas
+sin acordarte de los comandos. v9 (9 nov 2026): mejoras tiki aplicadas
 al fork kid V22 antes del build, si el toggle está prendido (default ON):
 fix primera nota de ocarina (commit real 8feddfe, 4 líneas en hle_hid.c)
 y fix memoria/disco upstream 8d5d4f1 (devuelve 1.84 GB con F_PUNCHHOLE).

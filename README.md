@@ -1,8 +1,13 @@
 # TikiLuncherMac
 
-ForkTikiLauncher v8 para Mac + fork tiki-v22 de Ocarina of Time.
+ForkTikiLauncher v9 para Mac + fork tiki-v22 de Ocarina of Time.
 
 Launcher SwiftUI para Mac que construye juegos de Switch / Switch 2 a IPA para iPhone (AltStore Classic) o a .app para Mac, con nxnative / NX2Apple, con selector de fork, presets y descarga de herramientas. Todo desde el launcher, sin abrir otra app.
+
+## Que trae la v9
+
+- **v9:** el launcher se revisa a sí mismo en este repo (botón "Revisar si hay versión nueva del launcher", arriba): consulta el README en main y el último commit. Si hay una v10 o más, baja el repo nuevo y recompila.
+- Aplica primero el parche de memoria ya resuelto `patches/tiki-v22-mem.patch` (8d5d4f1 resuelto a mano, candidato sin compilar) antes de intentar el cherry-pick, que antes chocaba siempre.
 
 ## Que trae la v8
 

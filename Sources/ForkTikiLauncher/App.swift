@@ -2,7 +2,13 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v8 (9 nov 2026)
+// ForkTikiLauncher — v9 (9 nov 2026)
+// v9: el launcher se revisa a si mismo en tu GitHub tikipro7/TikiLuncherMac:
+// boton "Revisar si hay version nueva del launcher" consulta el README
+// en main y el ultimo commit; si hay una v10 o mas, baja el repo nuevo.
+// Tambien aplica primero el parche de memoria ya resuelto tiki-v22-mem.patch
+// (8d5d4f1 resuelto a mano, candidato sin compilar) antes de intentar el
+// cherry-pick, que antes chocaba siempre en hle_svc.c.
 // v8: mejoras tiki aplicadas al fork kid V22 antes del build, si el
 // toggle está prendido (default ON, solo para kid/Ocarina):
 //  1) fix primera nota de ocarina, commit real 8feddfe (NO b1d7c70/6121fd7),
@@ -159,6 +165,8 @@ struct ContentView: View {
     @State private var tikiFixStatus: String = ""
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
+    @State private var appUpdateStatus: String = ""
+    private let appVersion = "v9"
     @State private var nupPath: String = ""
     @State private var extraPaths: [String] = []
     @State private var inputKind: String = "file"
@@ -272,10 +280,17 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     Text("ForkTikiLauncher").font(.largeTitle.bold())
+                    Text(appVersion).font(.callout).foregroundStyle(.secondary)
                     Spacer()
                     Text(freeGB).font(.callout).foregroundStyle(.secondary)
                 }
                 Text("Solo 4 pasos: 1 Motor, 2 Juego, 3 Preset, 4 Compilar. Lo demás es opcional.")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button("Revisar si hay versión nueva del launcher") { checkAppUpdate() }
+                    Text(appUpdateStatus).font(.callout).foregroundStyle(.secondary)
+                }
+                Text("Esto consulta tu GitHub tikipro7/TikiLuncherMac (README en main + último commit). Si el README dice una versión mayor que \(appVersion), baja el repo nuevo con git pull o Download ZIP y recompila el launcher.")
                     .font(.callout).foregroundStyle(.secondary)
 
                 Divider()
@@ -826,6 +841,19 @@ struct ContentView: View {
         }
     }
 
+    /// Revisa si hay una versión nueva del propio launcher en tu GitHub
+    /// tikipro7/TikiLuncherMac. No descarga ni instala nada solo:
+    /// muestra en el log la versión que dice el README en main y el
+    /// último commit. Si es mayor que appVersion, baja el repo y recompila.
+    private func checkAppUpdate() {
+        appUpdateStatus = "Revisando tu GitHub…"
+        let script = "echo '--- TikiLuncherMac en GitHub ---'; curl -s https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/README.md | grep -m1 'ForkTikiLauncher v' || echo 'No se pudo leer el README'; curl -s 'https://api.github.com/repos/tikipro7/TikiLuncherMac/commits?per_page=1' | grep -m1 '\"sha\"' || echo 'No se pudo leer commits'"
+        appendLog("$ Revisar versión del launcher en tikipro7/TikiLuncherMac\n")
+        runCommand("/bin/sh", ["-c", script]) { code in
+            appUpdateStatus = code == 0 ? "Revisa el log: si el README dice una versión mayor que \(appVersion), actualiza el launcher." : "No se pudo revisar (código \(code))."
+        }
+    }
+
     /// Mejoras tiki para Ocarina, solo en el fork kid V22.
     /// 1) Fix primera nota (commit real 8feddfe, NO b1d7c70/6121fd7):
     ///    4 líneas en dm/host/hle_hid.c, IsOunceVibrationDeviceMounted.
@@ -880,9 +908,14 @@ struct ContentView: View {
         if grep -q guest_file_punch dm/host/hle_svc.c; then
           echo "Memoria: fix 8d5d4f1 ya está."
         else
-          git remote add upstream https://github.com/seedds/nxnative.git 2>/dev/null || true
-          git fetch upstream main --depth 50
-          git cherry-pick 8d5d4f1b04610fef5a96521c72a4263d68794959 && echo "Memoria: cherry-pick 8d5d4f1 aplicado." || { git cherry-pick --abort 2>/dev/null || true; echo "Memoria: cherry-pick 8d5d4f1 con conflicto, se abortó. Prueba en V23 o aplica a mano."; }
+          curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/patches/tiki-v22-mem.patch -o /tmp/tiki-v22-mem.patch
+          if git apply /tmp/tiki-v22-mem.patch 2>/dev/null; then
+            echo "Memoria: parche tiki-v22-mem aplicado (8d5d4f1 resuelto a mano, candidato sin compilar)."
+          else
+            git remote add upstream https://github.com/seedds/nxnative.git 2>/dev/null || true
+            git fetch upstream main --depth 50
+            git cherry-pick 8d5d4f1b04610fef5a96521c72a4263d68794959 && echo "Memoria: cherry-pick 8d5d4f1 aplicado." || { git cherry-pick --abort 2>/dev/null || true; echo "Memoria: cherry-pick 8d5d4f1 con conflicto, se abortó. Prueba en V23 o aplica a mano."; }
+          fi
         fi
         grep -n guest_file_punch dm/host/hle_svc.c || true
         echo "Mejoras tiki terminadas."
