@@ -2,7 +2,10 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v10 (9 nov 2026)
+// ForkTikiLauncher — v11 (9 nov 2026)
+// v11: interfaz nueva, mas bonita y mas entendible. Tarjetas por paso,
+// numeros grandes 1-2-3-4, botones con icono, textos cortos en español
+// claro, y los detalles tecnicos escondidos en "¿Que es esto?".
 // v10: AUTO-ACTUALIZACION. Al abrir la app, sola consulta tu GitHub
 // tikipro7/TikiLuncherMac; si el README dice una version mayor que v10,
 // baja sola el App.swift nuevo, lo copia a Sources, recompila con
@@ -172,8 +175,33 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v10"
-    private let appVersionNumber = 10
+    private let appVersion = "v11"
+    private let appVersionNumber = 11
+
+    // MARK: - Interfaz v11: tarjetas y pasos claros
+    @ViewBuilder
+    private func stepTitle(number: String, icon: String, title: String, subtitle: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(number)
+                .font(.title2.bold())
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(Color.orange)
+                .clipShape(Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Label(title, systemImage: icon).font(.headline)
+                Text(subtitle).font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func card<Content: View>(_ content: Content) -> some View {
+        content
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .cornerRadius(14)
+    }
     @State private var nupPath: String = ""
     @State private var extraPaths: [String] = []
     @State private var inputKind: String = "file"
@@ -285,30 +313,50 @@ struct ContentView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text("ForkTikiLauncher").font(.largeTitle.bold())
-                    Text(appVersion).font(.callout).foregroundStyle(.secondary)
-                    Spacer()
-                    Text(freeGB).font(.callout).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Label("ForkTikiLauncher", systemImage: "gamecontroller.fill")
+                            .font(.largeTitle.bold())
+                        Text(appVersion)
+                            .font(.callout.bold())
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Color.orange.opacity(0.2))
+                            .cornerRadius(8)
+                        Spacer()
+                        Label(freeGB, systemImage: "internaldrive.fill")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    Text("🎮 Elige el motor, mete tu juego y dale a Compilar. Yo hago lo demás.")
+                        .font(.title3)
+                    Text("Solo 4 pasos. Lo demás es opcional, y si algo te suena raro, toca “¿Qué es esto?”.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    HStack {
+                        Button { checkAppUpdate() } label: {
+                            Label("Actualizar launcher", systemImage: "arrow.down.circle.fill")
+                        }
+                        .buttonStyle(.bordered)
+                        Text(appUpdateStatus).font(.callout).foregroundStyle(.secondary)
+                    }
+                    Text("Al abrir, la app sola revisa si hay una versión nueva en tu GitHub y te deja la nueva lista en build/Release.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
-                Text("Solo 4 pasos: 1 Motor, 2 Juego, 3 Preset, 4 Compilar. Lo demás es opcional.")
-                    .font(.callout).foregroundStyle(.secondary)
-                HStack {
-                    Button("Revisar / actualizar launcher ahora") { checkAppUpdate() }
-                    Text(appUpdateStatus).font(.callout).foregroundStyle(.secondary)
-                }
-                Text("Al abrir la app, sola consulta tu GitHub tikipro7/TikiLuncherMac. Si hay una versión mayor que \(appVersion), la baja y recompila sola, y te deja la app nueva en build/Release: solo cierra esta y abre la nueva. Si no hay nada nuevo, no hace nada.")
-                    .font(.callout).foregroundStyle(.secondary)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.12))
+                .cornerRadius(16)
 
-                Divider()
-                Text("Paso 1 · Motor: ¿rápido o optimizado?").font(.headline)
+                card(stepTitle(number: "1", icon: "cpu.fill", title: "Motor: ¿rápido o optimizado?", subtitle: "El motor es lo que convierte tu juego a iPhone o Mac."))
                 HStack {
-                    Button("nxnative / fork (Ocarina optimizado)") { selectedEngine = "nxnative" }
-                        .buttonStyle(.bordered)
-                        .tint(selectedEngine == "nxnative" ? .orange : nil)
-                    Button("S2Arm (rápido, genérico)") { selectedEngine = "s2arm" }
-                        .buttonStyle(.bordered)
-                        .tint(selectedEngine == "s2arm" ? .orange : nil)
+                    Button { selectedEngine = "nxnative" } label: {
+                        Label("Optimizado (Ocarina)", systemImage: "star.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(selectedEngine == "nxnative" ? .orange : .gray)
+                    Button { selectedEngine = "s2arm" } label: {
+                        Label("Rápido (cualquier juego)", systemImage: "bolt.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(selectedEngine == "s2arm" ? .orange : .gray)
                 }
                 if selectedEngine == "s2arm" {
                     Text("S2Arm headless, sin instalar S2Arm.app y sin abrir su ventana. Usa pack/oneclick/oneclick.sh del repo copiado en engines/s2arm. ForkTikiLauncher lo corre directo, te da IPA + paquete de recursos.")
@@ -326,7 +374,7 @@ struct ContentView: View {
                 }
 
                 Divider()
-                Text("Herramientas de GitHub (opcional, un clic)").font(.headline)
+                stepTitle(number: "•", icon: "arrow.down.to.line", title: "Descargar motores (opcional)", subtitle: "Un clic y se descargan solos, no tienes que ir a GitHub.")
                 Text("Con un botón se descarga en el momento, no tienes que ir a GitHub a mano. Se guarda en ~/ForkTikiLauncher/engines/.")
                     .font(.callout).foregroundStyle(.secondary)
                 HStack {
@@ -342,7 +390,7 @@ struct ContentView: View {
                 Text(downloadStatus).font(.callout).foregroundStyle(.secondary)
 
                 Divider()
-                Text("Carátula del IPA (opcional)").font(.headline)
+                stepTitle(number: "•", icon: "photo.fill", title: "Carátula del juego (opcional)", subtitle: "La imagen que se ve en tu iPhone cuando instalas el juego.")
                 Text("Antes de cada juego, elige la imagen que quieres que lleve el IPA como icono / carátula. PNG o JPG, cuadrada, 1024×1024 ideal.")
                     .font(.callout).foregroundStyle(.secondary)
                 HStack {
@@ -359,7 +407,7 @@ struct ContentView: View {
                 }
 
                 Divider()
-                Text("Paso 2 · Juego").font(.headline)
+                stepTitle(number: "2", icon: "gamecontroller", title: "Tu juego", subtitle: "Elige el juego y mete tu archivo .nup o .nsp.")
                 HStack {
                     ForEach(games) { game in
                         Button(game.name) { onGameChanged(game); selectedGame = game }
@@ -397,7 +445,7 @@ struct ContentView: View {
                 }
 
                 Divider()
-                Text("Fork (solo si el motor es nxnative)").font(.headline)
+                stepTitle(number: "•", icon: "tuningfork", title: "Fork: la versión optimizada", subtitle: "Solo si elegiste Optimizado. Es el motor con arreglos para Ocarina.")
                 Picker("Fork", selection: $selectedFork) {
                     ForEach(forks) { fork in
                         Text(fork.name).tag(fork)
@@ -438,7 +486,7 @@ struct ContentView: View {
                 }
 
                 Divider()
-                Text("Paso 3 · Preset: ¿30 o 60 fps?").font(.headline)
+                stepTitle(number: "3", icon: "speedometer", title: "¿A cuántos fps quieres jugar?", subtitle: "30 fps es estable en tu iPhone. 60 fps se ve mejor, pero se calienta más.")
                 Picker("Preset", selection: $selectedPreset) {
                     ForEach(presets) { preset in
                         Text(preset.name).tag(preset)
@@ -502,15 +550,19 @@ struct ContentView: View {
                 }
 
                 Divider()
-                Text("Paso 4 · Compilar").font(.headline)
+                stepTitle(number: "4", icon: "hammer.fill", title: "Compilar: el paso final", subtitle: "Elige dónde vas a jugar y dale al botón verde. Tarda unas 2 horas.")
                 Text("¿Para qué dispositivo?").font(.callout).foregroundStyle(.secondary)
                 HStack {
-                    Button("iPhone") { targetPlatform = "ios" }
-                        .buttonStyle(.bordered)
-                        .tint(targetPlatform == "ios" ? .blue : nil)
-                    Button("Mac") { targetPlatform = "mac" }
-                        .buttonStyle(.bordered)
-                        .tint(targetPlatform == "mac" ? .blue : nil)
+                    Button { targetPlatform = "ios" } label: {
+                        Label("iPhone 📱", systemImage: "iphone")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(targetPlatform == "ios" ? .blue : .gray)
+                    Button { targetPlatform = "mac" } label: {
+                        Label("Mac 💻", systemImage: "macbook")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(targetPlatform == "mac" ? .blue : .gray)
                 }
                 Text(targetPlatform == "mac" ? "Mac: te da una .app para tu Mac, con el mismo fork, no un IPA." : "iPhone: te da el IPA para AltStore Classic.")
                     .font(.callout).foregroundStyle(.secondary)
@@ -556,10 +608,15 @@ struct ContentView: View {
                 Toggle("Borrar el juego (.nup / .nsp) cuando termine el build, para ahorrar espacio", isOn: $deleteGameAfterBuild)
                 Text("Solo se borra si el build terminó bien y el IPA ya existe. Si el build falla, no se borra nada.")
                     .font(.callout).foregroundStyle(.secondary)
-                Button(isBuilding ? "Compilando…" : "Build \(selectedGame.name)") { build() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(isBuilding || isCheckingDeps || gameInputPath.isEmpty)
+                Button { build() } label: {
+                    Label(isBuilding ? "Compilando… no cierres la app" : "🚀 Compilar \(selectedGame.name)", systemImage: "play.fill")
+                        .font(.title3.bold())
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .controlSize(.large)
+                .disabled(isBuilding || isCheckingDeps || gameInputPath.isEmpty)
                 Text(status).font(.callout).foregroundStyle(.secondary)
                 if isBuilding {
                     VStack(alignment: .leading, spacing: 4) {

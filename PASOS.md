@@ -1,3 +1,7 @@
+# PASOS — ForkTikiLauncher v11
+
+v11: interfaz nueva con tarjetas por paso, números 1-2-3-4, botón verde grande para Compilar, y textos cortos.
+
 # PASOS — ForkTikiLauncher v10
 
 v10: auto-actualización al abrir la app, desde tikipro7/TikiLuncherMac. Si hay versión nueva, baja el App.swift, recompila sola y deja la app nueva en build/Release.
