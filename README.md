@@ -28,7 +28,7 @@ Requisitos: Mac Apple Silicon, macOS 26.6+, Xcode 27.2, Homebrew, Python 3.12, x
 Base: kid-with-sword-remake rama `v22`, commit `84aa8c3`.
 
 - **Aplicado y verificado:** fix primera nota de ocarina, commit upstream `8feddfe` (PR seedds#1444), 4 lineas en `dm/host/hle_hid.c`, `IsOunceVibrationDeviceMounted` linea 910 en V22. Sin este fix el juego se cierra en la primera nota de Zelda's Lullaby con Impa y bloquea la quest principal.
-- **NO aplicado:** fix de memoria/disco upstream `8d5d4f1` (F_PUNCHHOLE, 1.84 GB devueltos en M4 Pro). Dio conflicto en 5 archivos, sobre todo `dm/host/hle_svc.c` 473-589, porque kid V22 ya divergio de upstream ahi. No se invento un parche a mano. Hay que resolverlo en la Mac, donde el build valida, o esperar a V23 de kid. Ver `patches/tiki-v22-NOTAS.md`.
+- **Resuelto a mano, candidato SIN COMPILAR:** fix de memoria/disco upstream `8d5d4f1` (F_PUNCHHOLE, 1.84 GB devueltos en M4 Pro). Dio conflicto en 5 archivos, sobre todo `dm/host/hle_svc.c` 473-589, porque kid V22 ya divergio de upstream ahi. Se resolvio hunk por hunk conservando la maquinaria Potato de kid y la firma de upstream, sin borrar lineas de kid; el diff tiene exactamente el mismo stat que upstream (199 inserciones, 31 borrados) y `git apply --check` pasa en un clon limpio. No se pudo compilar en Linux, la Mac debe validarlo con el build. Ver `patches/tiki-v22-mem.patch` y `patches/tiki-v22-mem-NOTAS.md`.
 
 Archivos: `patches/tiki-v22.patch` (solo el fix de la ocarina, SHA256 7611e951217e5222fc0c5d1f57ed7b3b54ef63d9300b8760073dbcb343767516), `patches/ocarina-note-fix.patch` (el mismo), `patches/tiki-v22-NOTAS.md`, `docs/codex-optimizaciones.md`.
 
