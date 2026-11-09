@@ -2,7 +2,11 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v20 (9 nov 2026)
+// ForkTikiLauncher — v21 (9 nov 2026)
+// v21: el boton de actualizar por fin usa la API de GitHub en vez de
+// raw.githubusercontent.com, porque raw se quedaba en cache y siempre
+// bajaba la version vieja (v19 en vez de v20). Ahora el actualizador
+// baja App.swift y project.yml por la API, que no tiene esa cache.
 // v20: errores encontrados en revision. 1) Picker de Fork: si el fork
 // elegido no estaba en la lista filtrada 'solo el mejor', el Picker
 // quedaba en blanco. Ahora siempre incluye el fork elegido. 2) Cargar
@@ -257,8 +261,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v20"
-    private let appVersionNumber = 20
+    private let appVersion = "v21"
+    private let appVersionNumber = 21
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1211,7 +1215,7 @@ struct ContentView: View {
         let script = """
         set -x
         cd "\(baseDir.path)"
-        VER=$(curl -s https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/README.md | grep -m1 -oE 'ForkTikiLauncher v[0-9]+' | grep -oE '[0-9]+')
+        VER=$(curl -s -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/tikipro7/TikiLuncherMac/contents/README.md" | grep -m1 -oE 'ForkTikiLauncher v[0-9]+' | grep -oE '[0-9]+')
         echo "Versión en GitHub: v$VER, esta app: \(appVersion)"
         if [ -z "$VER" ]; then echo "No se pudo leer GitHub, no se actualiza."; exit 0; fi
         if [ "$VER" -le \(appVersionNumber) ]; then echo "Ya estás en la última versión."; exit 0; fi
@@ -1223,8 +1227,8 @@ struct ContentView: View {
         exec >> actualizar.log 2>&1
         export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
         echo "Actualizando a la versión nueva…"
-        curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/Sources/ForkTikiLauncher/App.swift -o Sources/ForkTikiLauncher/App.swift
-        curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/project.yml -o project.yml
+        curl -sL -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/tikipro7/TikiLuncherMac/contents/Sources/ForkTikiLauncher/App.swift" -o Sources/ForkTikiLauncher/App.swift
+        curl -sL -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/tikipro7/TikiLuncherMac/contents/project.yml" -o project.yml
         /opt/homebrew/bin/xcodegen generate
         xcodebuild -project ForkTikiLauncher.xcodeproj -scheme ForkTikiLauncher -configuration Release build
         cp -R "$HOME/Library/Developer/Xcode/DerivedData/ForkTikiLauncher-ghtzqyhxhnoemhcmazbbmdwwdane/Build/Products/Release/ForkTikiLauncher.app" build/Release/ForkTikiLauncher.app

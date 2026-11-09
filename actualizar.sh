@@ -7,8 +7,8 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 cd "$HOME/ForkTikiLauncher" || { echo "No existe ~/ForkTikiLauncher, clona primero el repo."; exit 1; }
 command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
 echo "Bajando la última versión de tikipro7/TikiLuncherMac…"
-curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/Sources/ForkTikiLauncher/App.swift -o Sources/ForkTikiLauncher/App.swift
-curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/project.yml -o project.yml
+curl -sL -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/tikipro7/TikiLuncherMac/contents/Sources/ForkTikiLauncher/App.swift" -o Sources/ForkTikiLauncher/App.swift
+curl -sL -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/tikipro7/TikiLuncherMac/contents/project.yml" -o project.yml
 /opt/homebrew/bin/xcodegen generate
 xcodebuild -project ForkTikiLauncher.xcodeproj -scheme ForkTikiLauncher -configuration Release build
 mkdir -p build/Release
