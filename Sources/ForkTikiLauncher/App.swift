@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v26 (9 nov 2026)
+// ForkTikiLauncher — v27 (9 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -287,8 +287,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v26"
-    private let appVersionNumber = 26
+    private let appVersion = "v27"
+    private let appVersionNumber = 27
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1440,7 +1440,7 @@ struct ContentView: View {
              *v = targets ? dm_haptics_actual(__builtin_ctz(targets), *h >> 16 & 1) : (dm_vibration){0, 160, 0, 320};
         """
         let patchURL = FileManager.default.temporaryDirectory.appendingPathComponent("ocarina-note-fix.patch")
-        try? patch.write(to: patchURL, atomically: true, encoding: .utf8)
+        try? (patch + "\n").write(to: patchURL, atomically: true, encoding: .utf8)
         let script = """
         set -x
         cd "\(dir.path)"
