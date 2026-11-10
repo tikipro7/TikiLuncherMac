@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v38 (10 nov 2026)
+// ForkTikiLauncher — v39 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -324,8 +324,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v38"
-    private let appVersionNumber = 38
+    private let appVersion = "v39"
+    private let appVersionNumber = 39
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1225,15 +1225,31 @@ struct ContentView: View {
             let eta = rest.split(separator: " ").first.map(String.init) ?? ""
             if !eta.isEmpty { buildETA = "ETA \(eta)" }
         }
-        // Paso [x/6] o [x/5].
-        if let open = text.firstIndex(of: "["),
-           let close = text[open...].firstIndex(of: "]") {
+        // v39: Paso [x/7] o [x/6]. El log trae la hora primero,
+        // "[02:04:08] [3/7] rewrite ...", y antes se tomaba el PRIMER
+        // corchete, que es la hora [02:04:08], no el paso. Por eso la
+        // barra nunca avanzaba. Ahora se buscan TODOS los corchetes y
+        // se toma el primero que sea [numero/numero], no [RED] ni la hora.
+        var stepFound: (step: Double, total: Double, close: String.Index)? = nil
+        var searchFrom = text.startIndex
+        while let open = text[searchFrom...].firstIndex(of: "["),
+              let close = text[open...].firstIndex(of: "]") {
             let inside = String(text[text.index(after: open)..<close])
             let parts = inside.split(separator: "/")
-            // Solo [numero/numero], no [RED] ni otros corchetes del log.
             if parts.count == 2,
-               let step = Double(parts[0]), let total = Double(parts[1]), total > 0,
+               let s = Double(parts[0]), let tot = Double(parts[1]), tot > 0,
                parts[0].allSatisfy({ $0.isNumber }), parts[1].allSatisfy({ $0.isNumber }) {
+                stepFound = (s, tot, close)
+                break
+            }
+            searchFrom = text.index(after: close)
+            if searchFrom >= text.endIndex { break }
+        }
+        if let found = stepFound {
+            let step = found.step
+            let total = found.total
+            let close = found.close
+            if true {
                 let stepName = text[close...].trimmingCharacters(in: .whitespacesAndNewlines)
                     .split(separator: " ").first.map(String.init) ?? ""
                 buildStepText = "Paso \(Int(step)) de \(Int(total))" + (stepName.isEmpty ? "" : " · \(stepName)")
@@ -1261,6 +1277,7 @@ struct ContentView: View {
                 if let inner = inner { frac = ((step - 1) + inner) / total }
                 buildProgress = min(1, max(0, frac))
             }
+        }
         }
         if text.contains("BUILD SUCCEEDED") || log.contains("✓ [6/6]") || log.contains("✓ [5/5]") {
             buildProgress = 1
