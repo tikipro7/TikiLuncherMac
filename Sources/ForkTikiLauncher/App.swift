@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v35 (10 nov 2026)
+// ForkTikiLauncher — v36 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -324,8 +324,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v35"
-    private let appVersionNumber = 35
+    private let appVersion = "v36"
+    private let appVersionNumber = 36
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -412,9 +412,9 @@ struct ContentView: View {
         return home
     }
     private func volumeFreeGB(at url: URL) -> Double {
-        if let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityKey]),
-           let bytes = values.volumeAvailableCapacity {
-            return Double(bytes) / 1_000_000_000
+        if let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+           let bytes = values.volumeAvailableCapacityForImportantUsage {
+            return Double(bytes) / 1_073_741_824
         }
         return 0
     }
@@ -451,9 +451,12 @@ struct ContentView: View {
         }
     }
     private var spaceNote: String {
-        romfsMode == "separate"
-            ? "Separate: IPA ~3.2 GB + romfs.img aparte. Pico ~102 GB con el .nup."
-            : "Bundle: IPA ~27 GB con todo dentro. Pico ~127 GB con el .nup."
+        if inputSizeGB <= 0 {
+            return "Elige tu juego en el Paso 2 para calcular el espacio de ESE juego, no de Ocarina."
+        }
+        return romfsMode == "separate"
+            ? String(format: "Separate: el IPA queda chico y el RomFS va aparte. Pico ~%.0f GB para este juego (%.1f GB).", spaceNeededGB, inputSizeGB)
+            : String(format: "Bundle: el IPA trae todo dentro. Pico ~%.0f GB para este juego (%.1f GB).", spaceNeededGB, inputSizeGB)
     }
 
     // v24: mide el disco DESTINO (externo si asi se eligio), no el interno.
@@ -470,7 +473,7 @@ struct ContentView: View {
         guard fm.fileExists(atPath: path, isDirectory: &isDir) else { return 0 }
         if !isDir.boolValue {
             let size = (try? fm.attributesOfItem(atPath: path)[.size] as? NSNumber)?.doubleValue ?? 0
-            return size / 1_000_000_000
+            return size / 1_073_741_824
         }
         // Carpeta descomprimida: suma el tamaño de los archivos dentro.
         var total: Double = 0
@@ -481,15 +484,20 @@ struct ContentView: View {
                 total += size
             }
         }
-        return total / 1_000_000_000
+        return total / 1_073_741_824
     }
 
-    // Pico aprox para cualquier juego, no solo Ocarina:
-    // Separate ~4x el tamaño del .nup/carpeta + 6 GB, Bundle ~5x + 7 GB.
-    // Ocarina (24 GB) da ~102 GB en Separate y ~127 GB en Bundle, que es lo medido.
+    // v36: pico por plataforma, no la misma formula para todos.
+    // Switch 2 (.nup): Separate ~4x + 6 GB, Bundle ~5x + 7 GB.
+    // Ocarina (24 GB) da ~102 GB en Separate y ~127 GB en Bundle, medido.
+    // Switch 1 (.xci/.nsp): Separate ~2.5x + 4 GB, Bundle ~3x + 5 GB.
+    // Luigi (8 GB) da ~24 GB en Separate, no 38 GB como decia la formula vieja.
     private var spaceNeededGB: Double {
         let nup = inputSizeGB
-        guard nup > 0 else { return romfsMode == "separate" ? 102 : 127 }
+        guard nup > 0 else { return 0 }
+        if gamePlatform == "sw1" {
+            return romfsMode == "separate" ? nup * 2.5 + 4 : nup * 3 + 5
+        }
         return romfsMode == "separate" ? nup * 4 + 6 : nup * 5 + 7
     }
 
@@ -503,7 +511,10 @@ struct ContentView: View {
     private var romfsModeText: String { romfsMode == "separate" ? "Separate" : "Bundle" }
 
     private var spaceNeededText: String {
-        String(format: "Este build consumirá: ~%.0f GB en pico (%@), con el .nup incluido", spaceNeededGB, romfsModeText)
+        if inputSizeGB <= 0 {
+            return "Este build consumirá: elige tu juego para calcularlo."
+        }
+        return String(format: "Este build consumirá: ~%.0f GB en pico (%@), juego de %.1f GB", spaceNeededGB, romfsModeText, inputSizeGB)
     }
 
     private var spaceFreeText: String {
@@ -514,13 +525,16 @@ struct ContentView: View {
     }
 
     private var spaceResultText: String {
+        if inputSizeGB <= 0 {
+            return "Elige tu juego en el Paso 2 para saber si cabe."
+        }
         if spaceFits {
             return String(format: "Te sobran ~%.0f GB después del build. Sí cabe.", freeGBValue - spaceNeededGB)
         }
         return String(format: "No cabe: te faltan ~%.0f GB en %@. Libera espacio, usa Separate o elige otro disco.", spaceNeededGB - freeGBValue, isExternalDestination ? "el disco externo" : "tu Mac")
     }
 
-    private var spaceFits: Bool { !externalDestinationMissing && freeGBValue >= spaceNeededGB }
+    private var spaceFits: Bool { !externalDestinationMissing && (inputSizeGB <= 0 || freeGBValue >= spaceNeededGB) }
 
     var body: some View {
         ScrollView {
