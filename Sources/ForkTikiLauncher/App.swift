@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v33 (10 nov 2026)
+// ForkTikiLauncher — v34 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -180,8 +180,45 @@ let games: [Game] = [
     Game(id: "oot", name: "Ocarina of Time (Switch 2)", titleId: "0400486024DEC000"),
     Game(id: "dkb", name: "Donkey Kong Bananza (Switch 2)", titleId: "040074A01BF12000"),
     Game(id: "pkp", name: "Pokémon Pokopia (Switch 2)", titleId: "0400A3A01EE4C000"),
+    Game(id: "lm3", name: "Luigi's Mansion 3", titleId: "0100DCA0064A000"),
+    Game(id: "acnh", name: "Animal Crossing: New Horizons", titleId: "01006F800232000"),
+    Game(id: "botw", name: "Zelda: Breath of the Wild", titleId: "01007EF00011E000"),
+    Game(id: "totk", name: "Zelda: Tears of the Kingdom", titleId: "0100F2C0115B6000"),
+    Game(id: "smo", name: "Super Mario Odyssey", titleId: "0100000000010000"),
+    Game(id: "mk8", name: "Mario Kart 8 Deluxe", titleId: "0100152000022000"),
     Game(id: "other", name: "Otro juego (manual)", titleId: ""),
 ]
+
+/// Detecta el juego por el Title ID (16 hex) en el nombre del archivo
+/// o carpeta, ej. "[0400486024DEC000]" o "0400A3A01EE4C000", o por
+/// palabras del nombre (Luigi, Ocarina, Bananza, Pokopia...).
+/// Devuelve el juego y su Title ID, o nil si no lo reconoce.
+func detectGame(from path: String) -> (game: Game, titleId: String)? {
+    let lower = path.lowercased()
+    // 1) Title ID de 16 hex en el nombre
+    let hex = "0123456789abcdef"
+    var found = ""
+    var run = ""
+    for ch in lower {
+        if hex.contains(ch) { run.append(ch); if run.count == 16 { found = run } }
+        else { run = "" }
+    }
+    if !found.isEmpty {
+        let tid = found.uppercased()
+        if let g = games.first(where: { $0.titleId.lowercased() == found }) { return (g, tid) }
+        return (Game(id: "other", name: "Juego \(tid)", titleId: tid), tid)
+    }
+    // 2) Por nombre, sin Title ID
+    let byName: [(String, String)] = [
+        ("ocarina", "oot"), ("luigi", "lm3"), ("bananza", "dkb"), ("pokopia", "pkp"),
+        ("animal crossing", "acnh"), ("breath of the wild", "botw"), ("tears of the kingdom", "totk"),
+        ("mario odyssey", "smo"), ("mario kart 8", "mk8"),
+    ]
+    for (word, id) in byName {
+        if lower.contains(word), let g = games.first(where: { $0.id == id }) { return (g, g.titleId) }
+    }
+    return nil
+}
 
 /// ¿Hay fork / mejora para este Title ID? La app lo reconoce sola.
 func recommendedFork(for titleId: String) -> (forkId: String, text: String) {
@@ -287,8 +324,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v33"
-    private let appVersionNumber = 33
+    private let appVersion = "v34"
+    private let appVersionNumber = 34
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -985,6 +1022,14 @@ struct ContentView: View {
                 DispatchQueue.main.async {
                     inputKind = "folder"
                     gameFolderPath = url.path
+                    if let d = detectGame(from: url.path) {
+                        selectedGame = d.game
+                        customTitleId = d.titleId
+                        forkRecommendation = recommendedFork(for: d.titleId).text
+                        if let fork = forks.first(where: { $0.id == recommendedFork(for: d.titleId).forkId }) { selectedFork = fork }
+                        status = "Juego detectado: \(d.game.name) · \(d.titleId)"
+                        appendLog("Juego detectado solo: \(d.game.name) · \(d.titleId)\n")
+                    }
                     refreshDisk()
                 }
             }
@@ -1122,6 +1167,17 @@ struct ContentView: View {
                 DispatchQueue.main.async {
                     inputKind = "file"
                     nupPath = url.path
+                    if url.path.lowercased().hasSuffix(".nup") { gamePlatform = "sw2" } else { gamePlatform = "sw1" }
+                    if let d = detectGame(from: url.path) {
+                        selectedGame = d.game
+                        customTitleId = d.titleId
+                        forkRecommendation = recommendedFork(for: d.titleId).text
+                        if let fork = forks.first(where: { $0.id == recommendedFork(for: d.titleId).forkId }) { selectedFork = fork }
+                        status = "Juego detectado: \(d.game.name) · \(d.titleId)"
+                        appendLog("Juego detectado solo: \(d.game.name) · \(d.titleId)\n")
+                    } else {
+                        status = "No reconocí el juego por su nombre, pon el Title ID a mano."
+                    }
                     refreshDisk()
                 }
             }
