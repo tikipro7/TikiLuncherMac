@@ -1,3 +1,7 @@
+# PASOS — ForkTikiLauncher v24
+
+v24: destino del build en disco externo. En Paso 4 · Compilar, sección "Destino del build", elige Disco interno o Disco externo. Ver "Destino del build: disco externo" abajo.
+
 # PASOS — ForkTikiLauncher v12
 
 v12: buscar forks para cualquier juego, y optimización universal Switch 2 para cualquier Title ID.
@@ -162,6 +166,31 @@ Siempre copia después de recompilar, o abres la versión vieja.
    con todo dentro). Separate es el que recomienda upstream.
    **Espacio:** el cuadro calcula el pico para cualquier juego con su
    tamaño medido: Separate ~4x el tamaño + 6 GB, Bundle ~5x + 7 GB.
+   En v24 el cuadro mide el disco DESTINO, no el interno: si elegiste
+   disco externo, te dice cuánto libre tienes AHÍ y si cabe AHÍ.
+
+## Destino del build: disco externo (v24)
+
+Para Luis, con solo 35 GB libres en su Mac M1, el build de Ocarina
+(~100 GB en pico) no cabe en el disco interno. Por eso en Paso 4 ·
+Compilar hay una sección **"Destino del build"**:
+
+1. Elige **"Disco externo (elegir carpeta)"**.
+2. Dale a **"Elegir carpeta en disco externo…"** y elige (o crea) la
+   carpeta, ej. `/Volumes/Disco Externo/ForkTikiLauncher/builds`.
+   Esa carpeta ES la carpeta de builds: ahí salen el build, el IPA y
+   el `RomFS.img`. La ruta se guarda sola, no hay que elegirla cada vez.
+3. El cuadro de Espacio ahora mide ESE disco. Si dice que sí cabe,
+   dale a Compilar.
+4. Al terminar, el log dice claro: "IPA y RomFS.img en: <ruta externa>".
+
+⚠️ Advertencias:
+- El disco debe estar **conectado TODO el build** (1-2 h), no lo
+  desconectes ni dejes que la Mac se duerma, o el build falla.
+- Formato **APFS o exFAT**. FAT32 no sirve para archivos de 26 GB.
+- Si el disco no está conectado, el build **no arranca** y te lo dice.
+- Para volver al disco interno, elige "Disco interno" o dale a
+  "Volver a disco interno".
    Ocarina, 24 GB, da ~102 GB en Separate y ~127 GB en Bundle, que es lo
    medido. Te dice cuánto tienes libre, cuánto consumirá y si cabe o no.
 7. **Dependencias (antes del Build):** dale a **Revisar dependencias**.

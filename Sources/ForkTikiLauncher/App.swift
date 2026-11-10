@@ -2,7 +2,16 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v23 (9 nov 2026)
+// ForkTikiLauncher — v24 (9 nov 2026)
+// v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
+// en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
+// interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
+// elegir Disco interno (~/ForkTikiLauncher/builds) o Disco externo
+// (elegir carpeta, ej. /Volumes/Disco Externo/ForkTikiLauncher/builds).
+// El build, el IPA y el RomFS.img van a esa carpeta, y el calculo de
+// espacio libre mide ESE disco, no el interno. El disco debe estar
+// conectado todo el build y formateado APFS o exFAT; si se desconecta,
+// el build falla. La ruta se guarda con @AppStorage, asi no se pierde.
 // v23: 'sin juego especifico' ya no se decide solo por el nombre del
 // fork. Ahora tambien lee la descripcion de GitHub y el README, y
 // busca el juego ahi: Zelda/Ocarina, Bananza, Mario Kart, Pokopia,
@@ -268,13 +277,18 @@ struct ContentView: View {
     @State private var selectedPreset: Preset = presetNone
     @State private var potatoMode: Bool = true
     @State private var applyTikiFixes: Bool = true
+    // v24: destino del build. "interno" = ~/ForkTikiLauncher/builds,
+    // "externo" = carpeta elegida en un disco externo. Se guarda con
+    // @AppStorage para que no se pierda al cerrar la app.
+    @AppStorage("buildDestination") private var buildDestination: String = "interno"
+    @AppStorage("externalBuildsPath") private var externalBuildsPath: String = ""
     @State private var tikiFixApplied: Bool = false
     @State private var tikiFixStatus: String = ""
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v23"
-    private let appVersionNumber = 23
+    private let appVersion = "v24"
+    private let appVersionNumber = 24
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -330,7 +344,43 @@ struct ContentView: View {
     private var home: URL { FileManager.default.homeDirectoryForCurrentUser }
     private var baseDir: URL { home.appendingPathComponent("ForkTikiLauncher") }
     private var enginesDir: URL { baseDir.appendingPathComponent("engines") }
-    private var buildsDir: URL { baseDir.appendingPathComponent("builds") }
+    // v24: si el destino es externo y hay una carpeta elegida, ESA
+    // carpeta ES la carpeta de builds (ej. /Volumes/Disco Externo/
+    // ForkTikiLauncher/builds). Si no, la de siempre en el disco interno.
+    private var buildsDir: URL {
+        if buildDestination == "externo" && !externalBuildsPath.isEmpty {
+            return URL(fileURLWithPath: externalBuildsPath)
+        }
+        return baseDir.appendingPathComponent("builds")
+    }
+    private var isExternalDestination: Bool { buildDestination == "externo" }
+    private var destinationLabel: String {
+        isExternalDestination
+            ? (externalBuildsPath.isEmpty ? "Disco externo: sin carpeta elegida" : "Disco externo: \(externalBuildsPath)")
+            : "Disco interno: ~/ForkTikiLauncher/builds"
+    }
+    /// v24: la primera ruta que existe subiendo desde la carpeta elegida.
+    /// Sirve para medir el espacio libre de ESE volumen, aunque la
+    /// carpeta builds todavia no exista en el disco externo.
+    private var spaceProbeURL: URL {
+        if isExternalDestination && !externalBuildsPath.isEmpty {
+            var url = URL(fileURLWithPath: externalBuildsPath)
+            while !FileManager.default.fileExists(atPath: url.path) {
+                let parent = url.deletingLastPathComponent()
+                if parent.path == url.path { break }
+                url = parent
+            }
+            return url
+        }
+        return home
+    }
+    private func volumeFreeGB(at url: URL) -> Double {
+        if let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityKey]),
+           let bytes = values.volumeAvailableCapacity {
+            return Double(bytes) / 1_000_000_000
+        }
+        return 0
+    }
     private var presetsDir: URL { baseDir.appendingPathComponent("presets") }
 
     private func engineDir(_ fork: Fork) -> URL {
@@ -369,12 +419,10 @@ struct ContentView: View {
             : "Bundle: IPA ~27 GB con todo dentro. Pico ~127 GB con el .nup."
     }
 
-    private var freeGBValue: Double {
-        if let values = try? home.resourceValues(forKeys: [.volumeAvailableCapacityKey]),
-           let bytes = values.volumeAvailableCapacity {
-            return Double(bytes) / 1_000_000_000
-        }
-        return 0
+    // v24: mide el disco DESTINO (externo si asi se eligio), no el interno.
+    private var freeGBValue: Double { volumeFreeGB(at: spaceProbeURL) }
+    private var externalDestinationMissing: Bool {
+        isExternalDestination && (externalBuildsPath.isEmpty || !FileManager.default.fileExists(atPath: externalBuildsPath))
     }
 
     private var inputSizeGB: Double {
@@ -422,17 +470,20 @@ struct ContentView: View {
     }
 
     private var spaceFreeText: String {
-        String(format: "Tienes: %.0f GB libres en tu Mac", freeGBValue)
+        if externalDestinationMissing {
+            return "Disco externo: no conectado o sin carpeta elegida. Conectalo y elige la carpeta en "Destino del build"."
+        }
+        return String(format: "Tienes: %.0f GB libres en %@", freeGBValue, isExternalDestination ? "el disco externo" : "tu Mac")
     }
 
     private var spaceResultText: String {
         if spaceFits {
             return String(format: "Te sobran ~%.0f GB después del build. Sí cabe.", freeGBValue - spaceNeededGB)
         }
-        return String(format: "No cabe: te faltan ~%.0f GB. Libera espacio o usa Separate.", spaceNeededGB - freeGBValue)
+        return String(format: "No cabe: te faltan ~%.0f GB en %@. Libera espacio, usa Separate o elige otro disco.", spaceNeededGB - freeGBValue, isExternalDestination ? "el disco externo" : "tu Mac")
     }
 
-    private var spaceFits: Bool { freeGBValue >= spaceNeededGB }
+    private var spaceFits: Bool { !externalDestinationMissing && freeGBValue >= spaceNeededGB }
 
     var body: some View {
         ScrollView {
@@ -784,6 +835,34 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 Text(spaceNote).font(.callout).foregroundStyle(.secondary)
+                // v24: Destino del build — disco interno o disco externo.
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Destino del build").font(.subheadline.bold())
+                    Text("Aqui salen el build, el IPA y el RomFS.img. Si tu Mac no tiene espacio, mandalo a un disco externo.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Picker("Destino", selection: $buildDestination) {
+                        Text("Disco interno (~/ForkTikiLauncher/builds)").tag("interno")
+                        Text("Disco externo (elegir carpeta)").tag("externo")
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: buildDestination) { _ in refreshDisk() }
+                    if isExternalDestination {
+                        HStack {
+                            Button("Elegir carpeta en disco externo…") { pickExternalBuildsFolder() }
+                            if !externalBuildsPath.isEmpty {
+                                Button("Volver a disco interno") { buildDestination = "interno"; refreshDisk() }
+                            }
+                        }
+                        Text(destinationLabel).font(.callout).foregroundStyle(.secondary)
+                        Text("⚠️ El disco debe estar conectado TODO el build, no lo desconectes ni dejes que la Mac se duerma. Formato APFS o exFAT. Si se desconecta, el build falla y hay que retomarlo con el disco conectado.")
+                            .font(.callout).foregroundStyle(.orange)
+                    } else {
+                        Text(destinationLabel).font(.callout).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(10)
+                .background(Color(nsColor: .textBackgroundColor))
+                .cornerRadius(10)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Espacio").font(.subheadline.bold())
                     Text(spaceFreeText)
@@ -880,13 +959,16 @@ struct ContentView: View {
         }
     }
 
+    // v24: el numerito de arriba mide el disco DESTINO, no el interno.
     private func refreshDisk() {
-        if let values = try? home.resourceValues(forKeys: [.volumeAvailableCapacityKey]),
-           let bytes = values.volumeAvailableCapacity {
-            freeGB = String(format: "%.0f GB libres", Double(bytes) / 1_000_000_000)
-        } else {
-            freeGB = "espacio sin dato"
+        if externalDestinationMissing {
+            freeGB = "disco externo no conectado"
+            return
         }
+        let gb = volumeFreeGB(at: spaceProbeURL)
+        freeGB = gb > 0
+            ? String(format: "%.0f GB libres%@", gb, isExternalDestination ? " (externo)" : "")
+            : "espacio sin dato"
     }
 
     private var gameInputPath: String {
@@ -904,6 +986,30 @@ struct ContentView: View {
                     inputKind = "folder"
                     gameFolderPath = url.path
                     refreshDisk()
+                }
+            }
+        }
+    }
+
+    // v24: elige la carpeta que SERA la carpeta de builds en el disco
+    // externo, ej. /Volumes/Disco Externo/ForkTikiLauncher/builds.
+    // Si eliges solo /Volumes/Disco Externo, los builds van directo ahi.
+    private func pickExternalBuildsFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Elige la carpeta de builds en tu disco externo (ej. /Volumes/Disco Externo/ForkTikiLauncher/builds)"
+        panel.prompt = "Usar esta carpeta"
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                DispatchQueue.main.async {
+                    buildDestination = "externo"
+                    externalBuildsPath = url.path
+                    ensureDirs()
+                    refreshDisk()
+                    status = "Destino del build: disco externo en \(url.path)"
+                    appendLog("Destino del build (v24): \(url.path)\n")
                 }
             }
         }
@@ -1468,6 +1574,14 @@ struct ContentView: View {
             status = "Pon el Title ID del juego, para el build."
             return
         }
+        // v24: si el destino es externo, el disco tiene que estar
+        // conectado y la carpeta tiene que existir, si no el build
+        // fallaria a mitad despues de horas.
+        if externalDestinationMissing {
+            status = "El disco externo no esta conectado o no elegiste carpeta. Conectalo y elige la carpeta en Paso 4 · Destino del build."
+            appendLog("Destino externo no disponible: \(externalBuildsPath.isEmpty ? "sin carpeta elegida" : externalBuildsPath)\n")
+            return
+        }
         if gamePlatform == "sw1" {
             guard !prodKeysPath.isEmpty, FileManager.default.fileExists(atPath: prodKeysPath) else {
                 status = "Switch 1 ocupa prod.keys. Elige tu prod.keys con el botón."
@@ -1507,6 +1621,7 @@ struct ContentView: View {
             return
         }
         ensureDirs()
+        appendLog("Destino del build (v24): \(buildsDir.path)\n")
         if potatoMode {
             appendLog("Potato mode V18+ ON: activa Potato en el launcher del juego al arrancar (render 0.25, 30 fps).\n")
         }
@@ -1549,7 +1664,8 @@ struct ContentView: View {
             if code == 0 {
                 buildProgress = 1
                 buildStepText = "Terminado"
-                status = "Build terminado. El IPA está en la carpeta del build."
+                status = "Build terminado. El IPA y el RomFS.img quedaron en: \(buildsDir.path)"
+                appendLog("✅ IPA y RomFS.img en: \(buildsDir.path)\n")
                 if deleteGameAfterBuild {
                     let ipaPath = buildsDir.appendingPathComponent("\(selectedGame.name).ipa").path
                     // El IPA de nxnative sale como <NombreDelJuego>.ipa en builds/,

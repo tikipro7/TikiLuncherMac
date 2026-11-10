@@ -1,8 +1,12 @@
 # TikiLuncherMac
 
-ForkTikiLauncher v23 para Mac + fork tiki-v22 de Ocarina of Time.
+ForkTikiLauncher v24 para Mac + fork tiki-v22 de Ocarina of Time.
 
 Launcher SwiftUI para Mac que construye juegos de Switch / Switch 2 a IPA para iPhone (AltStore Classic) o a .app para Mac, con nxnative / NX2Apple, con selector de fork, presets y descarga de herramientas. Todo desde el launcher, sin abrir otra app.
+
+## Que trae la v24
+
+- **v24: destino del build en disco externo.** En Paso 4 · Compilar, sección "Destino del build": elige Disco interno (`~/ForkTikiLauncher/builds`) o Disco externo (botón "Elegir carpeta en disco externo…", ej. `/Volumes/Disco Externo/ForkTikiLauncher/builds`). El build, el IPA y el `RomFS.img` van a esa carpeta, y el cálculo de espacio libre mide ESE disco, no el interno. La ruta se guarda y no se pierde al cerrar la app. ⚠️ El disco debe estar conectado TODO el build, no desconectarlo, y formateado APFS o exFAT. Si no está conectado, el build no arranca y lo dice en el log. Para Luis: con solo 35 GB libres en su Mac M1, el build de Ocarina (~100 GB) ya cabe si el disco externo tiene espacio.
 
 ## Que trae la v23
 
