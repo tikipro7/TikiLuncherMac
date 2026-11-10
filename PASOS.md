@@ -1,4 +1,4 @@
-# PASOS — ForkTikiLauncher v24
+# PASOS — ForkTikiLauncher v25
 
 v24: destino del build en disco externo. En Paso 4 · Compilar, sección "Destino del build", elige Disco interno o Disco externo. Ver "Destino del build: disco externo" abajo.
 
@@ -166,7 +166,7 @@ Siempre copia después de recompilar, o abres la versión vieja.
    con todo dentro). Separate es el que recomienda upstream.
    **Espacio:** el cuadro calcula el pico para cualquier juego con su
    tamaño medido: Separate ~4x el tamaño + 6 GB, Bundle ~5x + 7 GB.
-   En v24 el cuadro mide el disco DESTINO, no el interno: si elegiste
+   En v25 el cuadro mide el disco DESTINO, no el interno: si elegiste
    disco externo, te dice cuánto libre tienes AHÍ y si cabe AHÍ.
 
 ## Destino del build: disco externo (v24)

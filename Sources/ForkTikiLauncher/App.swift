@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v24 (9 nov 2026)
+// ForkTikiLauncher — v25 (9 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -1333,10 +1333,16 @@ struct ContentView: View {
 
     private func checkForkUpdate() {
         forkUpdateStatus = "Revisando GitHub Releases…"
-        let script = "curl -s https://api.github.com/repos/cheemu21/kid-with-sword-remake/releases/latest | grep -m1 '\"tag_name\"' || echo 'No se pudo leer GitHub'"
+        let script = """
+        set -x
+        JSON=$(curl -sf https://api.github.com/repos/cheemu21/kid-with-sword-remake/releases/latest) || { echo "No se pudo leer GitHub (curl falló, revisa internet o límite de GitHub API)."; exit 0; }
+        echo "$JSON" | grep -m1 '"tag_name"'
+        echo "$JSON" | grep -m1 '"name"'
+        echo "Última versión en GitHub arriba. Si el tag es mayor que V22, dale a Clonar / actualizar fork."
+        """
         appendLog("$ Revisar versión del fork\n")
         runCommand("/bin/sh", ["-c", script]) { code in
-            forkUpdateStatus = code == 0 ? "Revisa el log: si el tag es mayor que V22, actualiza el fork." : "No se pudo revisar (código \(code))."
+            forkUpdateStatus = code == 0 ? "Revisa el log: el tag de arriba es la última versión." : "No se pudo revisar (código \(code))."
         }
     }
 
@@ -1476,13 +1482,22 @@ struct ContentView: View {
             // --autostash git guarda esos cambios, actualiza y los devuelve.
             // Si aun asi falla, hace reset a lo ultimo de GitHub; las
             // mejoras tiki se vuelven a aplicar solas al compilar.
-            let script = "git -C '\(dir.path)' fetch origin; git -C '\(dir.path)' pull --rebase --autostash || git -C '\(dir.path)' reset --hard origin/HEAD"
+            // v25: para kid, la rama default es V16 (HEAD e9c2f7e). Hay que
+            // cambiarse a la rama v22 explicito, si no el update no trae V22.
+            let v22 = selectedFork.folder == "kid-with-sword-remake" ? "git -C '\(dir.path)' fetch origin v22; git -C '\(dir.path)' checkout v22; git -C '\(dir.path)' pull --rebase --autostash origin v22 || git -C '\(dir.path)' reset --hard origin/v22; git -C '\(dir.path)' log --oneline -1; " : ""
+            let script = v22 + "git -C '\(dir.path)' fetch origin; git -C '\(dir.path)' pull --rebase --autostash || git -C '\(dir.path)' reset --hard origin/HEAD"
             runCommand("/bin/sh", ["-c", script]) { code in
                 gitStatus = code == 0 ? "Fork actualizado." : "git pull falló (código \(code)). Revisa el log."
             }
         } else {
             runCommand("/usr/bin/git", ["clone", selectedFork.repo, dir.path]) { code in
-                gitStatus = code == 0 ? "Fork clonado." : "git clone falló (código \(code)). Revisa el log."
+                if code == 0 && self.selectedFork.folder == "kid-with-sword-remake" {
+                    self.runCommand("/bin/sh", ["-c", "git -C '\(dir.path)' checkout v22 && git -C '\(dir.path)' log --oneline -1"]) { _ in
+                        self.gitStatus = "Fork clonado en v22."
+                    }
+                } else {
+                    self.gitStatus = code == 0 ? "Fork clonado." : "git clone falló (código \(code)). Revisa el log."
+                }
             }
         }
     }
