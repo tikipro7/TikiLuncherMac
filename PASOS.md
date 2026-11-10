@@ -1,4 +1,4 @@
-# PASOS — ForkTikiLauncher v31
+# PASOS — ForkTikiLauncher v32
 
 v24: destino del build en disco externo. En Paso 4 · Compilar, sección "Destino del build", elige Disco interno o Disco externo. Ver "Destino del build: disco externo" abajo.
 

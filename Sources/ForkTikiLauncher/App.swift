@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v31 (10 nov 2026)
+// ForkTikiLauncher — v32 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -287,8 +287,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v31"
-    private let appVersionNumber = 31
+    private let appVersion = "v32"
+    private let appVersionNumber = 32
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1697,7 +1697,19 @@ struct ContentView: View {
             try? FileManager.default.copyItem(atPath: iconPath, toPath: iconDest)
             appendLog("Imagen del IPA: \(iconPath) -> \(iconDest)\n")
         }
-        var buildArgs: [String] = [script, gameInputPath] + extraPaths + ["--romfs", romfsMode,
+        // v32: Switch 1 con un archivo suelto (.xci/.nsp...): el script
+        // solo acepta una carpeta o un .nup, asi que se le pasa la carpeta
+        // que contiene el archivo, no el archivo solo.
+        var scriptGameInput = gameInputPath
+        if gamePlatform == "sw1" {
+            let lower = gameInputPath.lowercased()
+            if lower.hasSuffix(".xci") || lower.hasSuffix(".xcz") || lower.hasSuffix(".nsp") || lower.hasSuffix(".nsz") {
+                let folder = (gameInputPath as NSString).deletingLastPathComponent
+                appendLog("Switch 1: el juego es un archivo suelto, se le pasa su carpeta al script: \(folder)\n")
+                scriptGameInput = folder
+            }
+        }
+        var buildArgs: [String] = [script, scriptGameInput] + extraPaths + ["--romfs", romfsMode,
                                 "--work-dir", workDir, "-l", "es-419"] + envArgs
         if targetPlatform == "mac" {
             buildArgs += ["--platform", "mac-app"]
