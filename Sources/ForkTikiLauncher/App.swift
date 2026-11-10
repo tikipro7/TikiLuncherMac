@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v32 (10 nov 2026)
+// ForkTikiLauncher — v33 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -287,8 +287,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v32"
-    private let appVersionNumber = 32
+    private let appVersion = "v33"
+    private let appVersionNumber = 33
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1711,6 +1711,12 @@ struct ContentView: View {
         }
         var buildArgs: [String] = [script, scriptGameInput] + extraPaths + ["--romfs", romfsMode,
                                 "--work-dir", workDir, "-l", "es-419"] + envArgs
+        // v33: Switch 1 ocupa prod.keys con -k, si no el script falla con
+        // "prod.keys (-k) not given". Antes solo se guardaba la ruta.
+        if gamePlatform == "sw1" && !prodKeysPath.isEmpty {
+            buildArgs += ["-k", prodKeysPath]
+            appendLog("prod.keys con -k: \(prodKeysPath)\n")
+        }
         if targetPlatform == "mac" {
             buildArgs += ["--platform", "mac-app"]
         }
