@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v25 (9 nov 2026)
+// ForkTikiLauncher — v26 (9 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -287,8 +287,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v25"
-    private let appVersionNumber = 25
+    private let appVersion = "v26"
+    private let appVersionNumber = 26
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1424,9 +1424,10 @@ struct ContentView: View {
         // Parche de la nota, embebido, para no depender de un archivo suelto.
         let patch = """
         diff --git a/dm/host/hle_hid.c b/dm/host/hle_hid.c
+        index 847eaf7..6264094 100644
         --- a/dm/host/hle_hid.c
         +++ b/dm/host/hle_hid.c
-        @@ -906,6 +906,10 @@
+        @@ -906,6 +906,10 @@ HLE_FORCE("_ZN2nn3hid22GetVibrationDeviceInfoEPNS0_19VibrationDeviceInfoERKNS0_2
          HLE_FORCE("_ZN2nn3hid24IsVibrationDeviceMountedERKNS0_21VibrationDeviceHandleE", "vibration: device mounted when the channel has an output", unsigned, h_hid_VibMounted, const uint32_t *h) {
              return h && vib_targets(*h);
          }
@@ -1437,6 +1438,7 @@ struct ContentView: View {
          HLE_FORCE("_ZN2nn3hid23GetActualVibrationValueEPNS0_14VibrationValueERKNS0_21VibrationDeviceHandleE", "vibration: last accepted channel value", void, h_hid_VibActual, dm_vibration *v, const uint32_t *h) {
              uint32_t targets = h ? vib_targets(*h) : 0;
              *v = targets ? dm_haptics_actual(__builtin_ctz(targets), *h >> 16 & 1) : (dm_vibration){0, 160, 0, 320};
+        }
         """
         let patchURL = FileManager.default.temporaryDirectory.appendingPathComponent("ocarina-note-fix.patch")
         try? patch.write(to: patchURL, atomically: true, encoding: .utf8)
@@ -1484,8 +1486,15 @@ struct ContentView: View {
             // mejoras tiki se vuelven a aplicar solas al compilar.
             // v25: para kid, la rama default es V16 (HEAD e9c2f7e). Hay que
             // cambiarse a la rama v22 explicito, si no el update no trae V22.
-            let v22 = selectedFork.folder == "kid-with-sword-remake" ? "git -C '\(dir.path)' fetch origin v22; git -C '\(dir.path)' checkout v22; git -C '\(dir.path)' pull --rebase --autostash origin v22 || git -C '\(dir.path)' reset --hard origin/v22; git -C '\(dir.path)' log --oneline -1; " : ""
-            let script = v22 + "git -C '\(dir.path)' fetch origin; git -C '\(dir.path)' pull --rebase --autostash || git -C '\(dir.path)' reset --hard origin/HEAD"
+            // v25 fix: en v22 quedas en detached HEAD, asi que un pull normal
+            // falla ("You are not currently on a branch") y el reset a
+            // origin/HEAD te devolvia a V16 (e9c2f7e). Para kid, SOLO v22.
+            let script: String
+            if selectedFork.folder == "kid-with-sword-remake" {
+                script = "git -C '\(dir.path)' fetch origin v22; git -C '\(dir.path)' checkout v22; git -C '\(dir.path)' pull --rebase --autostash origin v22 || git -C '\(dir.path)' reset --hard origin/v22; git -C '\(dir.path)' log --oneline -1"
+            } else {
+                script = "git -C '\(dir.path)' fetch origin; git -C '\(dir.path)' pull --rebase --autostash || git -C '\(dir.path)' reset --hard origin/HEAD"
+            }
             runCommand("/bin/sh", ["-c", script]) { code in
                 gitStatus = code == 0 ? "Fork actualizado." : "git pull falló (código \(code)). Revisa el log."
             }
