@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v39 (10 nov 2026)
+// ForkTikiLauncher — v40 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -324,8 +324,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v39"
-    private let appVersionNumber = 39
+    private let appVersion = "v40"
+    private let appVersionNumber = 40
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -337,15 +337,18 @@ struct ContentView: View {
     @State private var universalOptOn: Bool = true
 
     // MARK: - Interfaz v11: tarjetas y pasos claros
+    // v40: solo visual, sin tocar logica. Circulo con gradiente,
+    // tarjetas blancas con sombra, fondo gris claro.
     @ViewBuilder
     private func stepTitle(number: String, icon: String, title: String, subtitle: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             Text(number)
-                .font(.title2.bold())
+                .font(.title3.bold())
                 .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(Color.orange)
+                .frame(width: 38, height: 38)
+                .background(LinearGradient(colors: [.orange, .red], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .clipShape(Circle())
+                .shadow(color: .orange.opacity(0.35), radius: 4, x: 0, y: 2)
             VStack(alignment: .leading, spacing: 2) {
                 Label(title, systemImage: icon).font(.headline)
                 Text(subtitle).font(.callout).foregroundStyle(.secondary)
@@ -355,10 +358,11 @@ struct ContentView: View {
 
     private func card<Content: View>(_ content: Content) -> some View {
         content
-            .padding(14)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(14)
+            .cornerRadius(18)
+            .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 3)
     }
     @State private var nupPath: String = ""
     @State private var extraPaths: [String] = []
@@ -540,7 +544,7 @@ struct ContentView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Label("ForkTikiLauncher", systemImage: "gamecontroller.fill")
@@ -555,9 +559,10 @@ struct ContentView: View {
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     Text("🎮 Elige el motor, mete tu juego y dale a Compilar. Yo hago lo demás.")
-                        .font(.title3)
+                        .font(.title3.bold())
+                        .foregroundStyle(.white)
                     Text("Solo 4 pasos. Lo demás es opcional, y si algo te suena raro, toca “¿Qué es esto?”.")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.callout).foregroundStyle(.white.opacity(0.85))
                     HStack {
                         Button { checkAppUpdate() } label: {
                             Label("Actualizar launcher", systemImage: "arrow.down.circle.fill")
@@ -568,10 +573,11 @@ struct ContentView: View {
                     Text("Al abrir, la app sola revisa si hay una versión nueva en tu GitHub y te deja la nueva lista en build/Release.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
-                .padding(16)
+                .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.orange.opacity(0.12))
-                .cornerRadius(16)
+                .background(LinearGradient(colors: [.orange, .red], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .cornerRadius(20)
+                .shadow(color: .orange.opacity(0.3), radius: 10, x: 0, y: 4)
 
                 if showWelcome {
                     VStack(alignment: .leading, spacing: 8) {
@@ -967,6 +973,8 @@ struct ContentView: View {
                 if isBuilding {
                     VStack(alignment: .leading, spacing: 4) {
                         ProgressView(value: buildProgress)
+                            .tint(.green)
+                            .scaleEffect(x: 1, y: 2, anchor: .center)
                         HStack {
                             Text(buildStepText.isEmpty ? "Compilando…" : buildStepText)
                             Spacer()
