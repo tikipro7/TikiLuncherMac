@@ -10,3 +10,4 @@ targets:
       - path: Sources/ForkTikiLauncher
     settings:
       GENERATE_INFOPLIST_FILE: YES
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
