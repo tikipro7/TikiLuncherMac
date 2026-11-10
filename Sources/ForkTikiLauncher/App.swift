@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v29 (10 nov 2026)
+// ForkTikiLauncher — v30 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -287,8 +287,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v29"
-    private let appVersionNumber = 29
+    private let appVersion = "v30"
+    private let appVersionNumber = 30
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1178,6 +1178,15 @@ struct ContentView: View {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: launchPath)
         process.arguments = args
+        // v30: el launcher abierto desde Finder no tiene el PATH de la
+        // terminal, por eso no encontraba brew, xcodegen ni dotnet aunque
+        // ya estuvieran instalados. Se lo pasamos completo a cada proceso.
+        var env = ProcessInfo.processInfo.environment
+        let extraPaths = "/opt/homebrew/bin:/usr/local/bin:/usr/local/share/dotnet:/opt/homebrew/share/dotnet"
+        let basePath = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        env["PATH"] = extraPaths + ":" + basePath
+        env["DOTNET_ROOT"] = "/usr/local/share/dotnet"
+        process.environment = env
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
@@ -1524,6 +1533,7 @@ struct ContentView: View {
         done
         command -v xcodegen >/dev/null 2>&1 || [ -x /opt/homebrew/bin/xcodegen ] || { echo "Falta: xcodegen (en terminal: /opt/homebrew/bin/brew install xcodegen)"; missing=1; }
         command -v git >/dev/null 2>&1 || { echo "Falta: git"; missing=1; }
+        command -v dotnet >/dev/null 2>&1 || [ -x /usr/local/share/dotnet/dotnet ] || { echo "Falta: dotnet (.NET SDK 10, en terminal: brew install --cask dotnet-sdk)"; missing=1; }
         if [ "$missing" = 0 ]; then echo "Dependencias OK."; else exit 1; fi
         """
         appendLog("$ Revisar dependencias\n")
@@ -1544,6 +1554,7 @@ struct ContentView: View {
         export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
         "\(pythonPath)" -m pip install --break-system-packages lz4 "capstone>=5,<6" fonttools backports.zstd zbic
         command -v xcodegen >/dev/null 2>&1 || /opt/homebrew/bin/brew install xcodegen || brew install xcodegen
+        command -v dotnet >/dev/null 2>&1 || [ -x /usr/local/share/dotnet/dotnet ] || /opt/homebrew/bin/brew install --cask dotnet-sdk || brew install --cask dotnet-sdk
         /opt/homebrew/bin/xcodegen --version 2>/dev/null || xcodegen --version 2>/dev/null || echo "xcodegen NO se instaló, instálalo a mano: /opt/homebrew/bin/brew install xcodegen"
         echo "Instalación terminada. Dale a Revisar dependencias para confirmar."
         """
