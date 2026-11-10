@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v34 (10 nov 2026)
+// ForkTikiLauncher — v35 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -324,8 +324,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v34"
-    private let appVersionNumber = 34
+    private let appVersion = "v35"
+    private let appVersionNumber = 35
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1214,14 +1214,27 @@ struct ContentView: View {
                     .split(separator: " ").first.map(String.init) ?? ""
                 buildStepText = "Paso \(Int(step)) de \(Int(total))" + (stepName.isEmpty ? "" : " · \(stepName)")
                 var frac = (step - 1) / total
-                // Dentro de shader split, el conteo "6,789 / 42,854" afina el %.
-                if text.lowercased().contains("shader") {
-                    let nums = text.split(whereSeparator: { !$0.isNumber && $0 != "," })
-                        .compactMap { Double($0.replacingOccurrences(of: ",", with: "")) }
-                    if nums.count >= 2, nums[1] > 0 {
-                        frac = ((step - 1) + min(1, nums[0] / nums[1])) / total
+                // v35: dentro de un paso, afinar con el % o el conteo que
+                // trae el log, ej. "59%, 80/136 files" o "6,789 / 42,854 shaders".
+                // Asi la barra avanza dentro de cada paso, no solo al cambiar de paso.
+                var inner: Double? = nil
+                // 1) "59%" directo
+                if let pct = text.firstIndex(of: "%") {
+                    let before = text[..<pct]
+                    let digits = before.reversed().prefix(while: { $0.isNumber || $0 == "." })
+                    if let v = Double(String(digits.reversed())), v >= 0, v <= 100 { inner = v / 100 }
+                }
+                // 2) "80/136 files" o "6,789 / 42,854 shaders"
+                if inner == nil, let filesRange = text.range(of: "files") ?? text.range(of: "shaders") {
+                    let before = String(text[..<filesRange.lowerBound])
+                    let parts = before.split(separator: "/").map { $0.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces) }
+                    if parts.count >= 2,
+                       let a = Double(parts[parts.count - 2].split(separator: " ").last ?? ""),
+                       let b = Double(parts[parts.count - 1].split(separator: " ").first ?? ""), b > 0 {
+                        inner = min(1, a / b)
                     }
                 }
+                if let inner = inner { frac = ((step - 1) + inner) / total }
                 buildProgress = min(1, max(0, frac))
             }
         }
