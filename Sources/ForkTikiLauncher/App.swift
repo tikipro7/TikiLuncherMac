@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v41 (10 nov 2026)
+// ForkTikiLauncher — v42 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -324,8 +324,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v41"
-    private let appVersionNumber = 41
+    private let appVersion = "v42"
+    private let appVersionNumber = 42
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1301,8 +1301,12 @@ struct ContentView: View {
         let sig = isPaused ? SIGCONT : SIGSTOP
         kill(buildProcessId, sig)
         // Pausar tambien a los hijos (metal, xcodebuild, etc.)
-        let script = isPaused ? "pkill -CONT -P \(buildProcessId) || true" : "pkill -STOP -P \(buildProcessId) || true"
-        _ = system(script)
+        // v42: system() no existe en Swift 6, se usa Process con pkill.
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        child.arguments = [isPaused ? "-CONT" : "-STOP", "-P", "\(buildProcessId)"]
+        try? child.run()
+        child.waitUntilExit()
         isPaused.toggle()
         appendLog(isPaused ? "⏸️ Build pausado en \(buildStepText). Libera espacio y luego Retomar.\n" : "▶️ Build retomado en \(buildStepText).\n")
         status = isPaused ? "Build pausado. Libera espacio y luego dale a Retomar build." : "Compilando \(selectedGame.name)…"
