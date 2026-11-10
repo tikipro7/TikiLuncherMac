@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v30 (10 nov 2026)
+// ForkTikiLauncher — v31 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -287,8 +287,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v30"
-    private let appVersionNumber = 30
+    private let appVersion = "v31"
+    private let appVersionNumber = 31
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -604,7 +604,7 @@ struct ContentView: View {
                 }
 
                 Divider()
-                stepTitle(number: "2", icon: "gamecontroller", title: "Tu juego", subtitle: "Elige el juego y mete tu archivo .nup o .nsp.")
+                stepTitle(number: "2", icon: "gamecontroller", title: "Tu juego", subtitle: "Elige el juego y mete tu archivo .nup, .nsp, .nsz, .xci o .xcz.")
                 HStack {
                     ForEach(games) { game in
                         Button(game.name) { onGameChanged(game); selectedGame = game }
@@ -651,7 +651,7 @@ struct ContentView: View {
                     Button("Switch 2 (.nup, sin prod.keys)") { gamePlatform = "sw2" }
                         .buttonStyle(.bordered)
                         .tint(gamePlatform == "sw2" ? .orange : nil)
-                    Button("Switch 1 (.nsp/.nsz, con prod.keys)") { gamePlatform = "sw1" }
+                    Button("Switch 1 (.nsp/.nsz/.xci/.xcz, con prod.keys)") { gamePlatform = "sw1" }
                         .buttonStyle(.bordered)
                         .tint(gamePlatform == "sw1" ? .orange : nil)
                 }
@@ -769,7 +769,7 @@ struct ContentView: View {
                 Divider()
                 Text("Tu archivo del juego").font(.headline)
                 Picker("Entrada", selection: $inputKind) {
-                    Text("Archivo (.nup / .nsp / .nsz)").tag("file")
+                    Text("Archivo (.nup / .nsp / .nsz / .xci / .xcz)").tag("file")
                     Text("Carpeta del juego descomprimida").tag("folder")
                 }
                 .pickerStyle(.segmented)
@@ -1017,7 +1017,7 @@ struct ContentView: View {
 
     private func pickExtra() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "nsp") ?? .data, UTType(filenameExtension: "nsz") ?? .data, UTType(filenameExtension: "nup") ?? .data]
+        panel.allowedContentTypes = [UTType(filenameExtension: "nsp") ?? .data, UTType(filenameExtension: "nsz") ?? .data, UTType(filenameExtension: "nup") ?? .data, UTType(filenameExtension: "xci") ?? .data, UTType(filenameExtension: "xcz") ?? .data]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.begin { response in
@@ -1111,6 +1111,8 @@ struct ContentView: View {
             UTType(filenameExtension: "nup") ?? .data,
             UTType(filenameExtension: "nsp") ?? .data,
             UTType(filenameExtension: "nsz") ?? .data,
+            UTType(filenameExtension: "xci") ?? .data,
+            UTType(filenameExtension: "xcz") ?? .data,
         ]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = true
