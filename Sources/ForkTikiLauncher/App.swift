@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v40 (10 nov 2026)
+// ForkTikiLauncher — v41 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -324,8 +324,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v40"
-    private let appVersionNumber = 40
+    private let appVersion = "v41"
+    private let appVersionNumber = 41
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1285,7 +1285,6 @@ struct ContentView: View {
                 if let inner = inner { frac = ((step - 1) + inner) / total }
                 buildProgress = min(1, max(0, frac))
             }
-        }
         }
         if text.contains("BUILD SUCCEEDED") || log.contains("✓ [6/6]") || log.contains("✓ [5/5]") {
             buildProgress = 1
