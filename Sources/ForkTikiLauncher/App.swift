@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v28 (9 nov 2026)
+// ForkTikiLauncher — v29 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -287,8 +287,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v28"
-    private let appVersionNumber = 28
+    private let appVersion = "v29"
+    private let appVersionNumber = 29
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1645,8 +1645,15 @@ struct ContentView: View {
             status = "No está el script en \(engine.path). Primero clona el fork."
             return
         }
+        // v29: Mac + Separate no se puede combinar (el script lo rechaza
+        // con [RED]). Bloquearlo ANTES, no a mitad del build, y decirlo claro.
+        if targetPlatform == "mac" && romfsMode == "separate" {
+            status = "Mac + Separate no se puede: para Mac usa Bundle (todo dentro), para iPhone usa Separate. Cambia una de las dos y dale a Compilar."
+            appendLog("ERROR: Mac + Separate no se puede combinar. Para Mac usa Bundle, para iPhone usa Separate.\n")
+            return
+        }
         ensureDirs()
-        appendLog("Destino del build (v24): \(buildsDir.path)\n")
+        appendLog("Destino del build (v29): \(buildsDir.path) · dispositivo: \(targetPlatform) · RomFS: \(romfsMode)\n")
         if potatoMode {
             appendLog("Potato mode V18+ ON: activa Potato en el launcher del juego al arrancar (render 0.25, 30 fps).\n")
         }
@@ -1677,12 +1684,12 @@ struct ContentView: View {
             try? FileManager.default.copyItem(atPath: iconPath, toPath: iconDest)
             appendLog("Imagen del IPA: \(iconPath) -> \(iconDest)\n")
         }
-        appendLog("$ \(pythonPath) \(script) \(gameInputPath) \(extraPaths.joined(separator: " ")) --romfs \(romfsMode) --work-dir \(workDir) -l es-419 \(envArgs.joined(separator: " "))\n")
         var buildArgs: [String] = [script, gameInputPath] + extraPaths + ["--romfs", romfsMode,
                                 "--work-dir", workDir, "-l", "es-419"] + envArgs
         if targetPlatform == "mac" {
             buildArgs += ["--platform", "mac-app"]
         }
+        appendLog("$ \(pythonPath) \(buildArgs.joined(separator: " "))\n")
         runCommand(pythonPath, buildArgs) { code in
             isBuilding = false
             tikiFixApplied = false
