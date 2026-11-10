@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v37 (10 nov 2026)
+// ForkTikiLauncher — v38 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -324,8 +324,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v37"
-    private let appVersionNumber = 37
+    private let appVersion = "v38"
+    private let appVersionNumber = 38
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -374,6 +374,8 @@ struct ContentView: View {
     @State private var depChecked: Bool = false
     @State private var isCheckingDeps: Bool = false
     @State private var isBuilding: Bool = false
+    @State private var isPaused: Bool = false
+    @State private var buildProcessId: Int32 = 0
     @State private var buildProgress: Double = 0
     @State private var buildStepText: String = ""
     @State private var buildETA: String = ""
@@ -972,6 +974,14 @@ struct ContentView: View {
                             if !buildETA.isEmpty { Text("· \(buildETA)") }
                         }
                         .font(.callout).foregroundStyle(.secondary)
+                        HStack {
+                            Button(isPaused ? "▶️ Retomar build" : "⏸️ Pausar build") { togglePauseBuild() }
+                                .buttonStyle(.bordered)
+                            Text(isPaused ? "Pausado: el build no avanza ni escribe nada. Libera espacio tranquilo y luego dale a Retomar." : "Pausa para liberar espacio: el build se congela donde va, no se pierde nada.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
+                        Text("Si cierras la app o se para el build, dale a Compilar otra vez: el script reusa lo ya extraído y los shaders en caché, y retoma donde se quedó, no empieza de cero.")
+                            .font(.callout).foregroundStyle(.secondary)
                     }
                 }
 
@@ -1259,6 +1269,21 @@ struct ContentView: View {
     }
 
     /// Corre un comando y manda cada línea al log. Llama onDone en el hilo principal.
+    // v38: Pausa / Retoma el build con SIGSTOP / SIGCONT al proceso
+    // de Python y a sus hijos. Pausado no avanza ni escribe, y no se
+    // pierde nada: al retomar sigue donde iba.
+    private func togglePauseBuild() {
+        guard isBuilding, buildProcessId > 0 else { return }
+        let sig = isPaused ? SIGCONT : SIGSTOP
+        kill(buildProcessId, sig)
+        // Pausar tambien a los hijos (metal, xcodebuild, etc.)
+        let script = isPaused ? "pkill -CONT -P \(buildProcessId) || true" : "pkill -STOP -P \(buildProcessId) || true"
+        _ = system(script)
+        isPaused.toggle()
+        appendLog(isPaused ? "⏸️ Build pausado en \(buildStepText). Libera espacio y luego Retomar.\n" : "▶️ Build retomado en \(buildStepText).\n")
+        status = isPaused ? "Build pausado. Libera espacio y luego dale a Retomar build." : "Compilando \(selectedGame.name)…"
+    }
+
     private func runCommand(_ launchPath: String, _ args: [String], onDone: @escaping (Int32) -> Void) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: launchPath)
@@ -1287,6 +1312,8 @@ struct ContentView: View {
         }
         do {
             try process.run()
+            // v38: guardar el PID para poder pausar/retomar el build.
+            DispatchQueue.main.async { self.buildProcessId = process.processIdentifier }
         } catch {
             DispatchQueue.main.async {
                 status = "No se pudo correr \(launchPath): \(error.localizedDescription)"
@@ -1824,6 +1851,8 @@ struct ContentView: View {
         appendLog("$ \(pythonPath) \(buildArgs.joined(separator: " "))\n")
         runCommand(pythonPath, buildArgs) { code in
             isBuilding = false
+            isPaused = false
+            buildProcessId = 0
             tikiFixApplied = false
             if code == 0 {
                 buildProgress = 1
