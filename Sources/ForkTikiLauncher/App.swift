@@ -1438,7 +1438,6 @@ struct ContentView: View {
          HLE_FORCE("_ZN2nn3hid23GetActualVibrationValueEPNS0_14VibrationValueERKNS0_21VibrationDeviceHandleE", "vibration: last accepted channel value", void, h_hid_VibActual, dm_vibration *v, const uint32_t *h) {
              uint32_t targets = h ? vib_targets(*h) : 0;
              *v = targets ? dm_haptics_actual(__builtin_ctz(targets), *h >> 16 & 1) : (dm_vibration){0, 160, 0, 320};
-        }
         """
         let patchURL = FileManager.default.temporaryDirectory.appendingPathComponent("ocarina-note-fix.patch")
         try? patch.write(to: patchURL, atomically: true, encoding: .utf8)
