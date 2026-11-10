@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v27 (9 nov 2026)
+// ForkTikiLauncher — v28 (9 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -287,8 +287,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v27"
-    private let appVersionNumber = 27
+    private let appVersion = "v28"
+    private let appVersionNumber = 28
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1522,7 +1522,7 @@ struct ContentView: View {
         for m in lz4.block capstone fontTools backports.zstd zbic; do
           "$PY" -c "import $m" 2>/dev/null || { echo "Falta módulo Python: $m"; missing=1; }
         done
-        command -v xcodegen >/dev/null 2>&1 || { echo "Falta: xcodegen (brew install xcodegen)"; missing=1; }
+        command -v xcodegen >/dev/null 2>&1 || [ -x /opt/homebrew/bin/xcodegen ] || { echo "Falta: xcodegen (en terminal: /opt/homebrew/bin/brew install xcodegen)"; missing=1; }
         command -v git >/dev/null 2>&1 || { echo "Falta: git"; missing=1; }
         if [ "$missing" = 0 ]; then echo "Dependencias OK."; else exit 1; fi
         """
@@ -1541,8 +1541,10 @@ struct ContentView: View {
         isCheckingDeps = true
         depStatus = "Instalando lo que falta… tarda unos minutos."
         let script = """
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
         "\(pythonPath)" -m pip install --break-system-packages lz4 "capstone>=5,<6" fonttools backports.zstd zbic
-        command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+        command -v xcodegen >/dev/null 2>&1 || /opt/homebrew/bin/brew install xcodegen || brew install xcodegen
+        /opt/homebrew/bin/xcodegen --version 2>/dev/null || xcodegen --version 2>/dev/null || echo "xcodegen NO se instaló, instálalo a mano: /opt/homebrew/bin/brew install xcodegen"
         echo "Instalación terminada. Dale a Revisar dependencias para confirmar."
         """
         appendLog("$ Instalar dependencias\n")
