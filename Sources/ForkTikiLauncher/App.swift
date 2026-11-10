@@ -471,7 +471,7 @@ struct ContentView: View {
 
     private var spaceFreeText: String {
         if externalDestinationMissing {
-            return "Disco externo: no conectado o sin carpeta elegida. Conectalo y elige la carpeta en "Destino del build"."
+            return "Disco externo: no conectado o sin carpeta elegida. Conectalo y elige la carpeta en 'Destino del build'."
         }
         return String(format: "Tienes: %.0f GB libres en %@", freeGBValue, isExternalDestination ? "el disco externo" : "tu Mac")
     }
