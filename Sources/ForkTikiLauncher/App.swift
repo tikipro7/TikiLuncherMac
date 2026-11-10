@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v36 (10 nov 2026)
+// ForkTikiLauncher — v37 (10 nov 2026)
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -324,8 +324,8 @@ struct ContentView: View {
     @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v36"
-    private let appVersionNumber = 36
+    private let appVersion = "v37"
+    private let appVersionNumber = 37
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1792,7 +1792,25 @@ struct ContentView: View {
                 scriptGameInput = folder
             }
         }
-        var buildArgs: [String] = [script, scriptGameInput] + extraPaths + ["--romfs", romfsMode,
+        // v37: el script solo acepta UNA carpeta (nsp_dir), no varios
+        // .nsp sueltos. Antes se le pasaban los "extras" como argumentos
+        // sueltos y fallaba con "unrecognized arguments". Si los extras ya
+        // estan dentro de la misma carpeta del juego, ya van incluidos y
+        // no se pasan de nuevo. Si estan en otra carpeta, se avisa y no se
+        // pasan: hay que copiarlos a la carpeta del juego primero.
+        let inputFolder = (scriptGameInput as NSString).standardizingPath
+        var extrasDentro: [String] = []
+        var extrasFuera: [String] = []
+        for e in extraPaths {
+            if (e as NSString).standardizingPath.hasPrefix(inputFolder + "/") { extrasDentro.append(e) } else { extrasFuera.append(e) }
+        }
+        if !extrasDentro.isEmpty {
+            appendLog("Extras ya dentro de la carpeta del juego, van incluidos solos: \(extrasDentro.count) archivo(s).\n")
+        }
+        if !extrasFuera.isEmpty {
+            appendLog("AVISO: estos extras estan en otra carpeta y el script no los acepta sueltos, no se pasan: \(extrasFuera.joined(separator: ", ")). Copialos a la carpeta del juego y vuelve a compilar.\n")
+        }
+        var buildArgs: [String] = [script, scriptGameInput] + ["--romfs", romfsMode,
                                 "--work-dir", workDir, "-l", "es-419"] + envArgs
         // v33: Switch 1 ocupa prod.keys con -k, si no el script falla con
         // "prod.keys (-k) not given". Antes solo se guardaba la ruta.
