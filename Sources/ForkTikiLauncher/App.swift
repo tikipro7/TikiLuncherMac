@@ -2,9 +2,62 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v45 (10 nov 2026)
+// ForkTikiLauncher — v50 (10 nov 2026)
+// v50: perfil "ESTABLE" genérico Switch 2 (mismos 3 cambios que el estable de
+//   Ocarina, sin nada propio de Ocarina). Ocarina se queda con SU perfil
+//   completo (presetIphoneEstable, render 0.25, Potato, image-family,
+//   task-isolate), que jala mejor en Ocarina.
+// v49: perfil "ESTABLE" para iPhone 15 Pro Max (Ocarina X9): mismo base que el
+//   preset iPhone, con 3 cambios verificados en kid X9: TEX_LAZY=1 (Potato
+//   deletreado, sin DM_PRESET, que lo pisaría), FPS_HOLD=off, QOS_MAP=1.
+//   NO lleva DM_OPMODE (el perfil ya es handheld) ni DM_DYNAMIC_RESOLUTION
+//   (solo NieR). Ver patches/env-iphone-15promax-estable.txt y
+//   docs/iphone-estable-AB.md. Sin probar en 15 Pro Max: es candidato A/B.
+// v48: revisión de código. Corregido: Title IDs truncados de Luigi's Mansion 3
+//   y Animal Crossing (15 dígitos, nunca coincidían); detectGame ya exige una
+//   racha de exactamente 16 hex; la lista de juegos ya no se sale de la
+//   ventana (rejilla); .pickerStyle(.menu) estaba pegado al Text, no al
+//   Picker; texto del encabezado ya no promete auto-actualizar al abrir
+//   (desde v16 solo lo hace el botón). runCommand: ya no pierde salida por
+//   bytes UTF-8 partidos ni gira en vacío al terminar el proceso, y vacía
+//   el pipe al final. Log acotado (antes crecía sin límite y cada trozo
+//   hacía log.contains sobre todo el texto). build(): valida Mac+Separate
+//   ANTES de dependencias y parches, y ya no deja tikiFixApplied pegado en
+//   true tras un rechazo (el siguiente intento se saltaba los parches);
+//   evita que la Mac se duerma durante el build (ProcessInfo.beginActivity);
+//   avisa en el log si el espacio no alcanza; "borrar el juego" ya solo
+//   cuenta un .ipa creado EN ESTE build (antes bastaba cualquier .ipa viejo
+//   en builds/). Auto-actualizador: baja a un archivo temporal y valida
+//   antes de reemplazar App.swift, compila con -derivedDataPath propio (ya
+//   no depende del hash de DerivedData de la Mac de Luis) y si falla
+//   reabre la app vieja; ya no usa /tmp/tiki-update-marker (usa el código
+//   de salida 42). Optimización universal: ya NO pisa un game.tsv real
+//   (dm/games/<TitleID>/game.tsv, formato con tabuladores); el formato que
+//   escribía no existe en el fork X9. Descargar kid ya usa la misma lógica
+//   x9 que "Clonar / actualizar" (un git pull normal fallaba en HEAD suelto
+//   o con parches aplicados). Parches: curl -f (un 404 ya no se guarda como
+//   "parche"), y si el target es Mac y falta file_wire el parche Mac ya no
+//   se salta en silencio: se intenta y, si choca con el de iPhone, el log
+//   dice cómo resetear el fork.
+//   searchForks: el texto ya no se pega crudo en el shell.
+// v47: el modo bajo de RAM ya viene por defecto en el juego, no solo en ajustes:
+//   parche tiki-x9-oot-defaults.patch en kid X9 (game.tsv: fps_target 30, render
+//   0.25, potato_default on; game.py: DM_GAME_POTATO_DEFAULT; settings.tsv:
+//   DM_PRESET por defecto potato). El jugador no tiene que prender Potato en
+//   el launcher del juego; apagarlo sigue siendo un toggle y una elección
+//   guardada o un env.txt siguen ganando. Vale en iOS y en Mac: settings.py
+//   es compartida, y en Mac el launcher.json también sale con DM_PRESET
+//   potato y FPS 30 (verificado con SETTINGS_PLATFORM=mac). Además el
+//   launcher ya trae el preset por defecto para Ocarina según el
+//   dispositivo: iPhone -> 30 fps Potato, Mac -> Mac 8 GB MAX Potato.
 // v44: fork kid actualizado a X9 (10 nov 2026): Frame Gen 30->60, pools en archivos, fix crash tras guardar, primera nota ya en X9.
 // v45: optimizado para iPhone 15 Pro Max: preset iPhone X9 + parche tiki pool_peek (PR #2085) aplicado antes del build.
+// v46: mejora Traspaso-iPhone + eje Matías aplicada: parche único por plataforma
+//   antes del build — iPhone: tiki-x9-iphone.patch (combined + punch + image-family
+//   + task-isolate, sin file_wire); Mac: tiki-x9-max.patch (lo mismo + file_wire
+//   Mac-only). Preset iPhone actualizado a env-iphone-15promax.txt y presets
+//   MAX nuevos para Mac 8 GB y 16 GB. Sin probar en 15 Pro Max ni en M1: son
+//   candidatos, hay que medir en Kokiri parado 60 s (Metal/App/Available/FPS).
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -182,8 +235,8 @@ let games: [Game] = [
     Game(id: "oot", name: "Ocarina of Time (Switch 2)", titleId: "0400486024DEC000"),
     Game(id: "dkb", name: "Donkey Kong Bananza (Switch 2)", titleId: "040074A01BF12000"),
     Game(id: "pkp", name: "Pokémon Pokopia (Switch 2)", titleId: "0400A3A01EE4C000"),
-    Game(id: "lm3", name: "Luigi's Mansion 3", titleId: "0100DCA0064A000"),
-    Game(id: "acnh", name: "Animal Crossing: New Horizons", titleId: "01006F800232000"),
+    Game(id: "lm3", name: "Luigi's Mansion 3", titleId: "0100DCA0064A6000"),
+    Game(id: "acnh", name: "Animal Crossing: New Horizons", titleId: "01006F8002326000"),
     Game(id: "botw", name: "Zelda: Breath of the Wild", titleId: "01007EF00011E000"),
     Game(id: "totk", name: "Zelda: Tears of the Kingdom", titleId: "0100F2C0115B6000"),
     Game(id: "smo", name: "Super Mario Odyssey", titleId: "0100000000010000"),
@@ -197,13 +250,24 @@ let games: [Game] = [
 /// Devuelve el juego y su Title ID, o nil si no lo reconoce.
 func detectGame(from path: String) -> (game: Game, titleId: String)? {
     let lower = path.lowercased()
-    // 1) Title ID de 16 hex en el nombre
-    let hex = "0123456789abcdef"
+    // 1) Title ID: una racha de EXACTAMENTE 16 hex en el nombre (v48: antes
+    // tomaba los primeros 16 de cualquier racha más larga, y una palabra
+    // como "deadbeefcafebabe123" daba un Title ID falso).
+    let hex = Set("0123456789abcdef")
     var found = ""
+    var runs: [String] = []
     var run = ""
     for ch in lower {
-        if hex.contains(ch) { run.append(ch); if run.count == 16 { found = run } }
-        else { run = "" }
+        if hex.contains(ch) { run.append(ch) }
+        else { runs.append(run); run = "" }
+    }
+    runs.append(run)
+    // Prefiere un ID conocido; si no, el primero de 16 que empiece con 0100 / 0400.
+    let sixteen = runs.filter { $0.count == 16 }
+    if let known = sixteen.first(where: { r in games.contains { $0.titleId.lowercased() == r } }) {
+        found = known
+    } else if let plausible = sixteen.first(where: { $0.hasPrefix("01") || $0.hasPrefix("04") }) {
+        found = plausible
     }
     if !found.isEmpty {
         let tid = found.uppercased()
@@ -236,34 +300,93 @@ func recommendedFork(for titleId: String) -> (forkId: String, text: String) {
     }
 }
 
-// Sin preset por defecto (Luis lo agrega afuera). El preset V22
-// sigue en la lista por si lo quiere elegir.
-// Al cambiar de juego, la app ya no vuelve a poner el de 30 fps.
-func optimalPreset(for game: Game) -> Preset { presetNone }
+// v47: preset por defecto, no "Sin preset". Para Ocarina, el de 30 fps
+// Potato ya viene puesto al abrir y al cambiar de juego, para que el modo
+// bajo de RAM se aplique sin ir a ajustes: iPhone -> preset30, Mac ->
+// presetMacMax8 (mismo eje, con file_wire solo Mac). Para otros juegos,
+// "Sin preset (default del juego)". El jugador lo puede cambiar en la lista.
+// En el juego, el default también es Potato on / fps 30 / render 0.25 en
+// iOS y en Mac (tiki-x9-oot-defaults.patch, settings.py es compartida).
+func optimalPreset(for game: Game, platform: String = "ios") -> Preset {
+    guard game.titleId.uppercased() == "0400486024DEC000" else { return presetNone }
+    return platform == "mac" ? presetMacMax8 : preset30
+}
 let preset30 = Preset(
     id: "m1-30fps",
     name: "15 Pro Max · 30 fps Potato iPhone (X9)",
-    detail: "OPTIMIZADO PARA iPHONE 15 Pro Max: 30 fps Potato X9, render 0.25, MetalFX, Potato ON, Wide view OFF, Real-time presenting + Deadline boost ON en el launcher del juego, Frame Gen (30 fps mostrado a 60). Mantén 15 GB libres y No Molestar prendido. Primer arranque tarda más por los shaders nuevos.",
+    detail: "OPTIMIZADO PARA iPHONE 15 Pro Max, v46 Traspaso-iPhone + eje Matías (pool_peek + MetalFX + render bajo): 30 fps Potato X9, render 0.25, MetalFX, Potato ON, Wide view OFF, Real-time presenting + Deadline boost ON en el launcher del juego, Frame Gen off (30 fps mostrado a 60 si lo prendes con DM_FRAMEGEN=1). Mantén 15 GB libres y No Molestar prendido. Primer arranque tarda más por los shaders nuevos. Sin probar en 15 Pro Max.",
     env: """
+    DM_PRESET=potato
     DM_FPS_TARGET=30
     DM_RENDER_SCALE=0.25
     DM_UPSCALER=metalfx
-    DM_PRESENT_UPSCALE=off
-    DM_PSO_PREBUILD=1
+    DM_PRESENT_UPSCALE=metalfx
+    DM_TEX_RELEASE=1
     DM_PSO_MTL4=1
-    DM_PRESENT_SNAP=1
-    DM_FPS_HOLD=off
-    DM_FPS_PAYBACK=off
-    DM_THERMAL_CAP=0
+    DM_PSO_PREBUILD=1
+    DM_WIDE_VIEW=0
+    DM_RT=1
+    DM_FRAME_WG=1
     DM_NVN_ENC_THREAD=1
-    DM_FRAME_WG=0
-    DM_QOS_MAP=1
-    DM_QOS_EDGES=45,59
-    DM_NVN_GPUPROF=every:600
-    DM_METAL_HUD=0
-    DM_POOL_ANON_MAX_MB=512
-    DM_NVN_GMEM_NOBIG=1
-    DM_SHOW_FPS=0
+    DM_GUEST_FILE=1
+    DM_GUEST_FILE_PUNCH=1
+    DM_NVN_IMAGE_FAMILY=1
+    DM_NVN_ISOLATE_TASK=1
+    DM_FRAMEGEN=0
+    """
+)
+
+// v46: MAX para Mac, mismo eje Matías (pool_peek + MetalFX + Potato).
+// 8 GB = M1 8 GB, render 0.25, FG off. 16 GB = M1 Pro 16 GB o más,
+// render 0.50 (techo a probar, fallback 0.40), FG on.
+let presetMacMax8 = Preset(
+    id: "mac-max-8gb",
+    name: "Mac 8 GB · MAX Potato (X9)",
+    detail: "MAX para Mac M1 8 GB: 30 fps Potato, render 0.25, MetalFX, FG off. Lleva file_wire (solo Mac) + task-isolate + image-family. Sin probar en M1.",
+    env: """
+    DM_PRESET=potato
+    DM_FPS_TARGET=30
+    DM_RENDER_SCALE=0.25
+    DM_UPSCALER=metalfx
+    DM_PRESENT_UPSCALE=metalfx
+    DM_TEX_RELEASE=1
+    DM_FRAMEGEN=0
+    DM_PSO_MTL4=1
+    DM_PSO_PREBUILD=1
+    DM_WIDE_VIEW=0
+    DM_RT=1
+    DM_FRAME_WG=1
+    DM_NVN_ENC_THREAD=1
+    DM_GUEST_FILE=1
+    DM_NVN_FILE_WIRE=1
+    DM_NVN_ISOLATE_TASK=1
+    DM_GUEST_FILE_PUNCH=1
+    DM_NVN_IMAGE_FAMILY=1
+    """
+)
+
+let presetMacMax16 = Preset(
+    id: "mac-max-16gb",
+    name: "Mac 16 GB · MAX (X9)",
+    detail: "MAX para Mac 16 GB o más: 30 fps Potato, render 0.50 (techo a probar, si el p95 pasa de 33.3 ms baja a 0.40), MetalFX, FG on. Lleva file_wire (solo Mac) + task-isolate + image-family. Sin probar.",
+    env: """
+    DM_PRESET=potato
+    DM_FPS_TARGET=30
+    DM_RENDER_SCALE=0.50
+    DM_UPSCALER=metalfx
+    DM_PRESENT_UPSCALE=metalfx
+    DM_TEX_RELEASE=1
+    DM_FRAMEGEN=1
+    DM_PSO_MTL4=1
+    DM_PSO_PREBUILD=1
+    DM_WIDE_VIEW=0
+    DM_RT=1
+    DM_FRAME_WG=1
+    DM_NVN_ENC_THREAD=1
+    DM_NVN_FILE_WIRE=1
+    DM_NVN_ISOLATE_TASK=1
+    DM_GUEST_FILE_PUNCH=1
+    DM_NVN_IMAGE_FAMILY=1
     """
 )
 
@@ -289,7 +412,80 @@ let presetNone = Preset(
     env: ""
 )
 
-let presets: [Preset] = [preset30, preset60, presetNone]
+// v49: perfil "ESTABLE" iPhone 15 Pro Max. Base = preset30, con 3 cambios
+// verificados en kid X9 (ver patches/env-iphone-15promax-estable.txt):
+// TEX_LAZY=1 (Potato deletreado, sin DM_PRESET), FPS_HOLD=off, QOS_MAP=1.
+// Sin probar: candidato A/B contra el preset normal (docs/iphone-estable-AB.md).
+let presetIphoneEstable = Preset(
+    id: "iphone-estable-30fps",
+    name: "15 Pro Max · 30 fps ESTABLE iPhone (X9)",
+    detail: "ESTABLE para iPhone 15 Pro Max, para que los fps no se vayan cayendo con los minutos: TEX_LAZY=1 (Metal que sube parado), FPS_HOLD=off (frames tardíos no se quedan un vsync más), QOS_MAP=1 (menos calor). Mismo render 0.25, MetalFX, Potato, FG off que el preset normal. Sin probar: compararlo con el normal siguiendo docs/iphone-estable-AB.md.",
+    env: """
+    DM_NVN_RES_EVICT_MB=4400
+    DM_NVN_TEX_RECYCLE_MB=64
+    DM_NVN_ALIAS_SWEEP=600
+    DM_PSO_WARM_ONLY=1
+    DM_PSO_PREPARE=0
+    DM_POOL_ANON_MAX_MB=512
+    DM_NVN_GMEM_NOBIG=1
+    DM_TEX_LAZY_MIN_KB=4096
+    DM_TEX_LAZY=1
+    DM_FPS_TARGET=30
+    DM_RENDER_SCALE=0.25
+    DM_UPSCALER=metalfx
+    DM_PRESENT_UPSCALE=metalfx
+    DM_TEX_RELEASE=1
+    DM_PSO_MTL4=1
+    DM_PSO_PREBUILD=1
+    DM_WIDE_VIEW=0
+    DM_RT=1
+    DM_FRAME_WG=1
+    DM_NVN_ENC_THREAD=1
+    DM_GUEST_FILE=1
+    DM_GUEST_FILE_PUNCH=1
+    DM_NVN_IMAGE_FAMILY=1
+    DM_NVN_ISOLATE_TASK=1
+    DM_FRAMEGEN=0
+    DM_FPS_HOLD=off
+    DM_QOS_MAP=1
+    DM_QOS_EDGES=45,59
+    """
+)
+
+// v50: perfil "ESTABLE" genérico Switch 2. Mismos 3 cambios que el estable de
+// Ocarina (TEX_LAZY=1, FPS_HOLD=off, QOS_MAP=1), sin nada propio de Ocarina:
+// render 0.5 genérico (no 0.25), sin Potato, sin image-family, sin task-isolate.
+// Ocarina se queda con SU perfil completo (presetIphoneEstable), que jala mejor.
+let presetGenericoEstable = Preset(
+    id: "generico-estable-30fps",
+    name: "Genérico · 30 fps ESTABLE (Switch 2)",
+    detail: "ESTABLE para cualquier juego Switch 2 en iPhone 15 Pro Max: TEX_LAZY=1, FPS_HOLD=off, QOS_MAP=1. Render 0.5, Handheld, 30 fps. Sin probar por juego: cada juego se mide aparte. Ocarina usa su propio perfil estable, no este.",
+    env: """
+    DM_FPS_TARGET=30
+    DM_OPMODE=0
+    DM_RENDER_SCALE=0.5
+    DM_PRESENT_UPSCALE=off
+    DM_UPSCALER=metalfx
+    DM_PSO_PREBUILD=1
+    DM_PSO_MTL4=1
+    DM_PRESENT_SNAP=1
+    DM_NVN_ENC_THREAD=1
+    DM_FRAME_WG=0
+    DM_QOS_MAP=1
+    DM_QOS_EDGES=45,59
+    DM_TEX_LAZY=1
+    DM_TEX_LAZY_MIN_KB=4096
+    DM_FPS_HOLD=off
+    DM_TEX_RELEASE=1
+    DM_SHOW_FPS=0
+    DM_METAL_HUD=0
+    DM_TOUCH_HAPTICS=0
+    DM_RUMBLE=0
+    DM_PICTURE_FIT=fit
+    """
+)
+
+let presets: [Preset] = [preset30, presetIphoneEstable, presetGenericoEstable, presetMacMax8, presetMacMax16, preset60, presetNone]
 
 // MARK: - App
 
@@ -315,7 +511,7 @@ struct ContentView: View {
     @State private var customForkName: String = ""
     @State private var customForkRepo: String = ""
     @State private var forkAddStatus: String = ""
-    @State private var selectedPreset: Preset = presetNone
+    @State private var selectedPreset: Preset = preset30
     @State private var potatoMode: Bool = true
     @State private var applyTikiFixes: Bool = true
     // v24: destino del build. "interno" = ~/ForkTikiLauncher/builds,
@@ -325,11 +521,13 @@ struct ContentView: View {
     @AppStorage("externalBuildsPath") private var externalBuildsPath: String = ""
     @State private var tikiFixApplied: Bool = false
     @State private var tikiFixStatus: String = ""
-    @State private var forkVersion: String = "X9 + pool_peek tiki (10 nov 2026)"
+    @State private var forkVersion: String = "X9 + tiki v47 iPhone/MAX + defaults (10 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v45"
-    private let appVersionNumber = 45
+    // v48: evita que la Mac se duerma durante el build (se guarda el token).
+    @State private var sleepActivity: NSObjectProtocol? = nil
+    private let appVersion = "v50"
+    private let appVersionNumber = 50
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -440,7 +638,7 @@ struct ContentView: View {
 
     private func onGameChanged(_ game: Game) {
         // Al cambiar de juego, los valores se ponen en lo más óptimo para M1 + 15 Pro Max.
-        selectedPreset = optimalPreset(for: game)
+        selectedPreset = optimalPreset(for: game, platform: targetPlatform)
         status = "Juego: \(game.name). Preset óptimo: \(selectedPreset.name)."
         // La app reconoce el juego sola y te dice si hay fork / mejora.
         let rec = recommendedFork(for: game.titleId)
@@ -574,7 +772,7 @@ struct ContentView: View {
                         .buttonStyle(.bordered)
                         Text(appUpdateStatus).font(.callout).foregroundStyle(.secondary)
                     }
-                    Text("Al abrir, la app sola revisa si hay una versión nueva en tu GitHub y te deja la nueva lista en build/Release.")
+                    Text("El botón revisa si hay una versión nueva en tu GitHub; si la hay, la app se cierra, se recompila sola y abre la nueva. No se actualiza sola al abrir.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 .padding(18)
@@ -668,7 +866,7 @@ struct ContentView: View {
 
                 Divider()
                 stepTitle(number: "2", icon: "gamecontroller", title: "Tu juego", subtitle: "Elige el juego y mete tu archivo .nup, .nsp, .nsz, .xci o .xcz.")
-                HStack {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 8, alignment: .leading)], alignment: .leading, spacing: 8) {
                     ForEach(games) { game in
                         Button(game.name) { onGameChanged(game); selectedGame = game }
                             .buttonStyle(.bordered)
@@ -740,8 +938,8 @@ struct ContentView: View {
                         Text("\(fork.name) — para: \(gameForFork(fork))\(fork.desc.isEmpty ? "" : " — \(fork.desc)")").tag(fork)
                     }
                 }
-                Text("Este fork es para: \(gameForFork(selectedFork))").font(.callout).foregroundStyle(.secondary)
                 .pickerStyle(.menu)
+                Text("Este fork es para: \(gameForFork(selectedFork))").font(.callout).foregroundStyle(.secondary)
                 HStack {
                     Button("Clonar / actualizar fork") { cloneOrUpdateFork() }
                     Text(gitStatus).font(.callout).foregroundStyle(.secondary)
@@ -757,8 +955,8 @@ struct ContentView: View {
                     .font(.callout).foregroundStyle(.secondary)
                 Text("Fork: \(forkVersion). X9 trae Frame Gen (30 fps mostrado a 60), Potato mode para 15 Pro, pools en archivos, fix del crash tras guardar y la primera nota de ocarina ya arreglada. Probado en iPhone 18 Pro, no en 15 Pro Max.")
                     .font(.callout).foregroundStyle(.secondary)
-                Toggle("Mejoras tiki (Ocarina: nota + memoria)", isOn: $applyTikiFixes)
-                Text("Prendido: antes del build revisa en el fork kid X9 el fix de la primera nota de ocarina (ya viene en X9, línea ~2025 en hle_hid.c) y el fix de memoria/disco upstream 8d5d4f1 (devuelve 1.84 GB con F_PUNCHHOLE). Solo para kid/Ocarina, no toca el perfil ni el env, que los agregas tú afuera.")
+                Toggle("Mejoras tiki v47 (Ocarina: iPhone / MAX + defaults)", isOn: $applyTikiFixes)
+                Text("Prendido: antes del build aplica el parche único por plataforma — iPhone: tiki-x9-iphone.patch, Mac: tiki-x9-max.patch — eje Matías (pool_peek + MetalFX + render bajo), y el parche de defaults de Ocarina (fps 30, render 0.25, Potato on por defecto en el juego). También revisa el fix de la primera nota (ya viene en X9, línea ~2025 en hle_hid.c) y el fix de memoria/disco upstream 8d5d4f1. Solo para kid/Ocarina. Sin probar en 15 Pro Max ni en M1.")
                     .font(.callout).foregroundStyle(.secondary)
                 HStack {
                     Button("Aplicar mejoras tiki ahora") { applyTikiFixesToFork { _ in } }
@@ -879,12 +1077,12 @@ struct ContentView: View {
                 stepTitle(number: "4", icon: "hammer.fill", title: "Compilar: el paso final", subtitle: "Elige dónde vas a jugar y dale al botón verde. Tarda unas 2 horas.")
                 Text("¿Para qué dispositivo?").font(.callout).foregroundStyle(.secondary)
                 HStack {
-                    Button { targetPlatform = "ios" } label: {
+                    Button { targetPlatform = "ios"; if selectedPreset == preset30 || selectedPreset == presetMacMax8 { selectedPreset = optimalPreset(for: selectedGame, platform: "ios") } } label: {
                         Label("iPhone 📱", systemImage: "iphone")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(targetPlatform == "ios" ? .blue : .gray)
-                    Button { targetPlatform = "mac" } label: {
+                    Button { targetPlatform = "mac"; if selectedPreset == preset30 || selectedPreset == presetMacMax8 { selectedPreset = optimalPreset(for: selectedGame, platform: "mac") } } label: {
                         Label("Mac 💻", systemImage: "macbook")
                     }
                     .buttonStyle(.borderedProminent)
@@ -908,7 +1106,7 @@ struct ContentView: View {
                         Text("Disco externo (elegir carpeta)").tag("externo")
                     }
                     .pickerStyle(.segmented)
-                    .onChange(of: buildDestination) { _ in refreshDisk() }
+                    .onChange(of: buildDestination) { refreshDisk() }
                     if isExternalDestination {
                         HStack {
                             Button("Elegir carpeta en disco externo…") { pickExternalBuildsFolder() }
@@ -1123,14 +1321,33 @@ struct ContentView: View {
         let dir = enginesDir.appendingPathComponent(folder)
         downloadStatus = "Descargando \(folder) de GitHub…"
         if FileManager.default.fileExists(atPath: dir.appendingPathComponent(".git").path) {
-            runCommand("/usr/bin/git", ["-C", dir.path, "pull"]) { code in
-                downloadStatus = code == 0 ? "\(folder) actualizado." : "\(folder): git pull falló (código \(code))."
+            // v48: un "git pull" pelón falla en el fork kid (HEAD suelto en x9, o
+            // con parches tiki sin guardar). Se usa el mismo comando que
+            // "Clonar / actualizar fork".
+            runCommand("/bin/sh", ["-c", updateScript(folder: folder, path: dir.path)]) { code in
+                downloadStatus = code == 0 ? "\(folder) actualizado." : "\(folder): la actualización falló (código \(code)). Revisa el log."
             }
         } else {
             runCommand("/usr/bin/git", ["clone", repo, dir.path]) { code in
-                downloadStatus = code == 0 ? "\(folder) descargado en engines/\(folder)." : "\(folder): git clone falló (código \(code))."
+                if code == 0 && folder == "kid-with-sword-remake" {
+                    self.runCommand("/bin/sh", ["-c", "git -C '\(dir.path)' checkout x9 && git -C '\(dir.path)' log --oneline -1"]) { c2 in
+                        self.downloadStatus = c2 == 0 ? "\(folder) descargado en engines/\(folder) (rama x9)." : "\(folder) descargado, pero no pude pasar a la rama x9."
+                    }
+                } else {
+                    self.downloadStatus = code == 0 ? "\(folder) descargado en engines/\(folder)." : "\(folder): git clone falló (código \(code))."
+                }
             }
         }
+    }
+
+    /// v48: comando de shell para actualizar un fork ya clonado. Para kid, SOLO
+    /// la rama x9 (el HEAD por defecto del repo es V16); para el resto, pull
+    /// con rebase + autostash y, si falla, reset a lo último de GitHub.
+    private func updateScript(folder: String, path: String) -> String {
+        if folder == "kid-with-sword-remake" {
+            return "git -C '\(path)' fetch origin x9; git -C '\(path)' checkout x9; git -C '\(path)' pull --rebase --autostash origin x9 || git -C '\(path)' reset --hard origin/x9; git -C '\(path)' log --oneline -1"
+        }
+        return "git -C '\(path)' fetch origin; git -C '\(path)' pull --rebase --autostash || git -C '\(path)' reset --hard origin/HEAD"
     }
 
     private func downloadS2ArmApp() {
@@ -1223,6 +1440,18 @@ struct ContentView: View {
     private func appendLog(_ text: String) {
         DispatchQueue.main.async {
             log += text
+            // v48: el log de un build (42,854 shaders) crece sin parar y el
+            // TextEditor se arrastra. Se conservan los últimos ~400 mil bytes.
+            let maxBytes = 400_000
+            if log.utf8.count > maxBytes + 50_000 {
+                let tail = String(decoding: Array(log.utf8.suffix(maxBytes)), as: UTF8.self)
+                // Empieza en una línea completa.
+                if let nl = tail.firstIndex(of: "\n") {
+                    log = "… (log recortado, se muestran las últimas líneas) …\n" + String(tail[tail.index(after: nl)...])
+                } else {
+                    log = tail
+                }
+            }
             parseProgress(text)
         }
     }
@@ -1290,7 +1519,7 @@ struct ContentView: View {
                 buildProgress = min(1, max(0, frac))
             }
         }
-        if text.contains("BUILD SUCCEEDED") || log.contains("✓ [6/6]") || log.contains("✓ [5/5]") {
+        if text.contains("BUILD SUCCEEDED") || text.contains("✓ [6/6]") || text.contains("✓ [5/5]") || text.contains("✓ [7/7]") {
             buildProgress = 1
             buildStepText = "Terminado"
         }
@@ -1332,14 +1561,23 @@ struct ContentView: View {
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
+        // v48: String(data:encoding:.utf8) devolvía nil si el trozo cortaba
+        // un carácter UTF-8 a la mitad (ñ, ✓…) y se perdía esa salida; y al
+        // llegar a EOF availableData devuelve vacío sin parar, así que el
+        // handler giraba en vacío hasta que terminationHandler lo quitaba.
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            if let line = String(data: data, encoding: .utf8), !line.isEmpty {
-                appendLog(line)
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                return
             }
+            appendLog(String(decoding: data, as: UTF8.self))
         }
         process.terminationHandler = { proc in
             pipe.fileHandleForReading.readabilityHandler = nil
+            // Vacía lo que haya quedado sin leer, para no perder las últimas líneas.
+            let rest = pipe.fileHandleForReading.readDataToEndOfFile()
+            if !rest.isEmpty { appendLog(String(decoding: rest, as: UTF8.self)) }
             DispatchQueue.main.async { onDone(proc.terminationStatus) }
         }
         do {
@@ -1379,7 +1617,9 @@ struct ContentView: View {
         let q = forkSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { forkSearchStatus = "Escribe el nombre del juego primero."; return }
         forkSearchStatus = "Buscando en GitHub…"
-        let encoded = q.replacingOccurrences(of: " ", with: "+")
+        // v48: percent-encoding estricto (solo letras y números sin escapar);
+        // antes un ' en el texto rompía las comillas del comando de shell.
+        let encoded = (q.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "").replacingOccurrences(of: "%20", with: "+")
         let script = "curl -s 'https://api.github.com/search/repositories?q=\(encoded)+nxnative&per_page=8' | grep -E '\"full_name\"|\"description\"' | head -n 32 || echo 'No se pudo buscar en GitHub'"
         appendLog("$ Buscar forks: \(q)\n")
         runCommand("/bin/sh", ["-c", script]) { code in
@@ -1413,6 +1653,7 @@ struct ContentView: View {
     /// estaban. Si GitHub no responde, te lo dice y no borra la lista.
     private func loadAllForksFromGitHub() {
         allForksStatus = "Cargando todos los forks de GitHub…"
+        ensureDirs()   // v48: forks.json va en ~/ForkTikiLauncher, que puede no existir aún
         let jsonURL = baseDir.appendingPathComponent("forks.json")
         let script = "curl -s 'https://api.github.com/repos/seedds/nxnative/forks?per_page=100' -o /tmp/forks1.json; curl -s 'https://api.github.com/repos/cheemu21/kid-with-sword-remake/forks?per_page=100' -o /tmp/forks2.json; python3 -c \"import json; a=json.load(open('/tmp/forks1.json')); b=json.load(open('/tmp/forks2.json')); json.dump(a+b, open('\(jsonURL.path)','w'))\" || echo 'No se pudo cargar GitHub'"
         appendLog("$ Cargar todos los forks de GitHub\n")
@@ -1467,6 +1708,18 @@ struct ContentView: View {
         frame_wg off
         pad_layout native
         """
+        // v48: el fork X9 guarda el perfil REAL en dm/games/<TitleID>/game.tsv
+        // (claves separadas por tabulador, ej. "fps_target<TAB>30"). El formato
+        // de abajo (claves con espacio) no existe ahí, y pisar ese archivo
+        // destruiría el perfil afinado de Ocarina (incluidos los defaults v47).
+        // Por eso: si ya hay un game.tsv real, NO se toca; el perfil genérico
+        // solo se escribe si el juego aún no tiene perfil, en la ruta vieja.
+        let realProfile = dir.appendingPathComponent("dm/games/\(titleId)/game.tsv")
+        if FileManager.default.fileExists(atPath: realProfile.path) {
+            universalOptStatus = "Este juego ya tiene su perfil real en el fork (dm/games/\(titleId)/game.tsv). No lo piso: usa el preset del Paso 3."
+            appendLog("Optimización universal omitida: ya existe \(realProfile.path). Para ajustar fps / render usa el preset (env.txt).\n")
+            return
+        }
         let gameDir = dir.appendingPathComponent("graphics/nvn/games/\(titleId)")
         let profileURL = gameDir.appendingPathComponent("game.tsv")
         let script = """
@@ -1520,28 +1773,45 @@ struct ContentView: View {
         echo "Hay versión nueva v$VER, actualizando sola, la app se va a cerrar…"
         cat > actualizar.sh <<'EOS'
         #!/bin/sh
+        # v48: baja a archivos temporales y valida ANTES de reemplazar el
+        # código; compila con derivedDataPath propio (no depende del hash de
+        # DerivedData de ninguna Mac); si algo falla, reabre la app vieja.
         sleep 3
         cd "$HOME/ForkTikiLauncher" || exit 1
         exec >> actualizar.log 2>&1
         export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-        echo "Actualizando a la versión nueva…"
-        curl -sL -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/tikipro7/TikiLuncherMac/contents/Sources/ForkTikiLauncher/App.swift" -o Sources/ForkTikiLauncher/App.swift
-        curl -sL -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/tikipro7/TikiLuncherMac/contents/project.yml" -o project.yml
-        /opt/homebrew/bin/xcodegen generate
-        xcodebuild -project ForkTikiLauncher.xcodeproj -scheme ForkTikiLauncher -configuration Release build
-        cp -R "$HOME/Library/Developer/Xcode/DerivedData/ForkTikiLauncher-ghtzqyhxhnoemhcmazbbmdwwdane/Build/Products/Release/ForkTikiLauncher.app" build/Release/ForkTikiLauncher.app
+        echo "=== Actualizando $(date) ==="
+        API="https://api.github.com/repos/tikipro7/TikiLuncherMac/contents"
+        APP="build/Release/ForkTikiLauncher.app"
+        reopen_old() { echo "$1"; [ -d "$APP" ] && open "$APP"; exit 1; }
+        curl -fsSL -H "Accept: application/vnd.github.raw" "$API/Sources/ForkTikiLauncher/App.swift" -o App.swift.new || reopen_old "No se pudo bajar App.swift, sigo con la versión actual."
+        curl -fsSL -H "Accept: application/vnd.github.raw" "$API/project.yml" -o project.yml.new || reopen_old "No se pudo bajar project.yml, sigo con la versión actual."
+        grep -q "import SwiftUI" App.swift.new || reopen_old "App.swift bajado no parece Swift (¿límite de la API de GitHub?), sigo con la versión actual."
+        grep -q "^name: ForkTikiLauncher" project.yml.new || reopen_old "project.yml bajado no es válido, sigo con la versión actual."
+        cp Sources/ForkTikiLauncher/App.swift App.swift.bak 2>/dev/null
+        cp project.yml project.yml.bak 2>/dev/null
+        mv App.swift.new Sources/ForkTikiLauncher/App.swift
+        mv project.yml.new project.yml
+        restore_old() { echo "$1"; cp App.swift.bak Sources/ForkTikiLauncher/App.swift 2>/dev/null; cp project.yml.bak project.yml 2>/dev/null; [ -d "$APP" ] && open "$APP"; exit 1; }
+        xcodegen generate || restore_old "xcodegen falló, restauro el código anterior."
+        xcodebuild -project ForkTikiLauncher.xcodeproj -scheme ForkTikiLauncher -configuration Release -derivedDataPath build/DerivedData build || restore_old "xcodebuild falló, restauro el código anterior y reabro la app vieja."
+        NEW="build/DerivedData/Build/Products/Release/ForkTikiLauncher.app"
+        [ -d "$NEW" ] || restore_old "No apareció $NEW, restauro."
+        mkdir -p build/Release
+        rm -rf "$APP"
+        cp -R "$NEW" "$APP"
         echo "Listo, abriendo la app nueva…"
-        open build/Release/ForkTikiLauncher.app
+        open "$APP"
         EOS
         chmod +x actualizar.sh
         nohup ./actualizar.sh >/dev/null 2>&1 &
         echo "ACTUALIZANDO_SOLA"
-        touch /tmp/tiki-update-marker
+        exit 42
         """
         appendLog("$ Auto-actualizar launcher desde tikipro7/TikiLuncherMac\n")
         runCommand("/bin/sh", ["-c", script]) { code in
-            if FileManager.default.fileExists(atPath: "/tmp/tiki-update-marker") {
-                try? FileManager.default.removeItem(atPath: "/tmp/tiki-update-marker")
+            // v48: el script sale con 42 solo cuando lanzó el actualizador.
+            if code == 42 {
                 appUpdateStatus = "Actualizando sola, la app se va a cerrar y se abre la nueva."
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                     NSApplication.shared.terminate(nil)
@@ -1553,6 +1823,19 @@ struct ContentView: View {
     }
 
     /// Mejoras tiki para Ocarina, solo en el fork kid X9.
+    /// v47: después del parche por plataforma, el parche de defaults de Ocarina
+    ///   (tiki-x9-oot-defaults.patch): fps_target 30, render_scale_default 0.25
+    ///   y potato_default on en game.tsv, con DM_GAME_POTATO_DEFAULT en game.py
+    ///   y DM_PRESET por defecto en settings.tsv. Así el modo bajo de RAM ya
+    ///   viene prendido en el juego, sin ir a ajustes; apagarlo sigue siendo
+    ///   un toggle y una elección guardada o un env.txt siguen ganando.
+    /// v46: primero el parche único por plataforma (Traspaso-iPhone, eje Matías):
+    ///   iPhone (target ios): tiki-x9-iphone.patch — combined (pool_peek PR #2085
+    ///   + misses PSO PR #1825 + SHADER_CODE + LiveControls) + guest-file-punch
+    ///   + image-family V23 + task-isolate PR #1842. Sin file_wire (solo Mac).
+    ///   Mac (target mac): tiki-x9-max.patch — lo mismo + file_wire Mac-only.
+    ///   Si ese parche ya está o falla, caen los pasos viejos (nota, memoria,
+    ///   pool_peek) que se saltan solos con grep si ya están.
     /// 1) Fix primera nota (commit real 8feddfe, NO b1d7c70/6121fd7):
     ///    4 líneas en dm/host/hle_hid.c, IsOunceVibrationDeviceMounted.
     /// 2) Memoria/disco upstream 8d5d4f1: guest files devuelven bloques
@@ -1560,6 +1843,7 @@ struct ContentView: View {
     /// No toca perfil ni env.txt. Si un fix ya está, lo salta.
     /// Si el cherry-pick da conflicto, lo aborta y sigue con el otro fix;
     /// el build no se para por esto, pero el log lo dice.
+    /// Sin probar en 15 Pro Max ni en M1: candidatos, hay que medir.
     private func applyTikiFixesToFork(onDone: @escaping (Bool) -> Void) {
         guard selectedFork.folder == "kid-with-sword-remake" else {
             tikiFixStatus = "Mejoras tiki solo para kid/Ocarina."
@@ -1573,7 +1857,8 @@ struct ContentView: View {
             return
         }
         tikiFixStatus = "Aplicando mejoras tiki…"
-        appendLog("$ Mejoras tiki: ocarina 8feddfe + memoria 8d5d4f1\n")
+        let tikiPatchName = targetPlatform == "mac" ? "tiki-x9-max.patch" : "tiki-x9-iphone.patch"
+        appendLog("$ Mejoras tiki v46: \(tikiPatchName) + ocarina 8feddfe + memoria 8d5d4f1\n")
         // Parche de la nota, embebido, para no depender de un archivo suelto.
         let patch = """
         diff --git a/dm/host/hle_hid.c b/dm/host/hle_hid.c
@@ -1598,6 +1883,32 @@ struct ContentView: View {
         set -x
         cd "\(dir.path)"
         git checkout x9 2>/dev/null || git checkout v22
+        # v48: para Mac también se exige file_wire (solo lo trae tiki-x9-max.patch);
+        # si antes se aplicó el de iPhone, el de Mac no se saltaba.
+        NEED_WIRE=\(targetPlatform == "mac" ? "1" : "0")
+        WIRE_OK=1
+        if [ "$NEED_WIRE" = 1 ] && ! grep -qi file_wire dm/gfx/nvn/nvn_mtl.m; then WIRE_OK=0; fi
+        if [ "$WIRE_OK" = 1 ] && grep -q pool_peek dm/gfx/nvn/nvn_mtl.m && grep -q guest_file_punch dm/host/hle_svc.c && grep -q task_isolate_hit dm/gfx/nvn/nvn_mtl.m; then
+          echo "v46: parche \(tikiPatchName) ya está."
+        else
+          curl -fsSL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/patches/\(tikiPatchName) -o /tmp/\(tikiPatchName)
+          if git apply /tmp/\(tikiPatchName) 2>/dev/null; then
+            echo "v46: parche \(tikiPatchName) aplicado (candidato sin compilar, medir en Kokiri)."
+          else
+            echo "v46: git apply de \(tikiPatchName) falló, sigo con nota + memoria + pool_peek viejos."
+            echo "     Si antes aplicaste el parche de otra plataforma (iPhone <-> Mac), resetea el fork: git -C \(dir.path) checkout -- .  y dale a Compilar otra vez."
+          fi
+        fi
+        if grep -q potato_default dm/games/0400486024DEC000/game.tsv; then
+          echo "v47: defaults de Ocarina ya están (fps 30, render 0.25, Potato on)."
+        else
+          curl -fsSL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/patches/tiki-x9-oot-defaults.patch -o /tmp/tiki-x9-oot-defaults.patch
+          if git apply /tmp/tiki-x9-oot-defaults.patch 2>/dev/null; then
+            echo "v47: parche tiki-x9-oot-defaults aplicado (modo bajo de RAM por defecto en el juego)."
+          else
+            echo "v47: git apply de tiki-x9-oot-defaults falló, el juego queda con sus defaults viejos (fps 60, render 0.667, Potato off)."
+          fi
+        fi
         if grep -q IsOunceVibrationDeviceMounted dm/host/hle_hid.c; then
           echo "Ocarina: fix de la nota ya está."
         else
@@ -1607,7 +1918,7 @@ struct ContentView: View {
         if grep -q guest_file_punch dm/host/hle_svc.c; then
           echo "Memoria: fix 8d5d4f1 ya está."
         else
-          curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/patches/tiki-v22-mem.patch -o /tmp/tiki-v22-mem.patch
+          curl -fsSL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/patches/tiki-v22-mem.patch -o /tmp/tiki-v22-mem.patch
           if git apply /tmp/tiki-v22-mem.patch 2>/dev/null; then
             echo "Memoria: parche tiki-v22-mem aplicado (8d5d4f1 resuelto a mano, candidato sin compilar)."
           else
@@ -1619,7 +1930,7 @@ struct ContentView: View {
         if grep -q pool_peek dm/gfx/nvn/nvn_mtl.m; then
           echo "RAM: pool_peek tiki ya está."
         else
-          curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/patches/tiki-x9-pool-peek.patch -o /tmp/tiki-x9-pool-peek.patch
+          curl -fsSL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/patches/tiki-x9-pool-peek.patch -o /tmp/tiki-x9-pool-peek.patch
           if git apply /tmp/tiki-x9-pool-peek.patch 2>/dev/null; then
             echo "RAM: parche tiki-x9-pool-peek aplicado (PR #2085, candidato sin compilar)."
           else
@@ -1652,12 +1963,7 @@ struct ContentView: View {
             // v25 fix: en v22 quedas en detached HEAD, asi que un pull normal
             // falla ("You are not currently on a branch") y el reset a
             // origin/HEAD te devolvia a V16 (e9c2f7e). Para kid, SOLO v22.
-            let script: String
-            if selectedFork.folder == "kid-with-sword-remake" {
-                script = "git -C '\(dir.path)' fetch origin x9; git -C '\(dir.path)' checkout x9; git -C '\(dir.path)' pull --rebase --autostash origin x9 || git -C '\(dir.path)' reset --hard origin/x9; git -C '\(dir.path)' log --oneline -1"
-            } else {
-                script = "git -C '\(dir.path)' fetch origin; git -C '\(dir.path)' pull --rebase --autostash || git -C '\(dir.path)' reset --hard origin/HEAD"
-            }
+            let script = updateScript(folder: selectedFork.folder, path: dir.path)
             runCommand("/bin/sh", ["-c", script]) { code in
                 gitStatus = code == 0 ? "Fork actualizado." : "git pull falló (código \(code)). Revisa el log."
             }
@@ -1773,6 +2079,14 @@ struct ContentView: View {
             appendLog("Destino externo no disponible: \(externalBuildsPath.isEmpty ? "sin carpeta elegida" : externalBuildsPath)\n")
             return
         }
+        // v29: Mac + Separate no se puede combinar (el script lo rechaza
+        // con [RED]). v48: se valida AQUÍ, antes de dependencias y parches,
+        // para no esperar minutos y luego enterarse.
+        if targetPlatform == "mac" && romfsMode == "separate" {
+            status = "Mac + Separate no se puede: para Mac usa Bundle (todo dentro), para iPhone usa Separate. Cambia una de las dos y dale a Compilar."
+            appendLog("ERROR: Mac + Separate no se puede combinar. Para Mac usa Bundle, para iPhone usa Separate.\n")
+            return
+        }
         if gamePlatform == "sw1" {
             guard !prodKeysPath.isEmpty, FileManager.default.fileExists(atPath: prodKeysPath) else {
                 status = "Switch 1 ocupa prod.keys. Elige tu prod.keys con el botón."
@@ -1809,13 +2123,7 @@ struct ContentView: View {
         let script = engine.appendingPathComponent("scripts/build_ipa_from_nsp.py").path
         guard FileManager.default.fileExists(atPath: script) else {
             status = "No está el script en \(engine.path). Primero clona el fork."
-            return
-        }
-        // v29: Mac + Separate no se puede combinar (el script lo rechaza
-        // con [RED]). Bloquearlo ANTES, no a mitad del build, y decirlo claro.
-        if targetPlatform == "mac" && romfsMode == "separate" {
-            status = "Mac + Separate no se puede: para Mac usa Bundle (todo dentro), para iPhone usa Separate. Cambia una de las dos y dale a Compilar."
-            appendLog("ERROR: Mac + Separate no se puede combinar. Para Mac usa Bundle, para iPhone usa Separate.\n")
+            tikiFixApplied = false   // v48: si no, el siguiente intento se saltaba los parches
             return
         }
         ensureDirs()
@@ -1837,6 +2145,15 @@ struct ContentView: View {
             appendLog("Sin preset: no se pasa --env-file, el juego usa sus valores por default.\n")
         }
         let workDir = buildsDir.appendingPathComponent("\(currentTitleId)_build").path
+        if inputSizeGB > 0 && !spaceFits {
+            appendLog("AVISO: el cálculo dice que no cabe (\(spaceResultText)). El build sigue, pero puede fallar por falta de espacio; usa Pausar para liberar.\n")
+        }
+        let buildStart = Date()
+        // v48: sin esto la Mac puede dormirse a mitad de un build de 1-2 h
+        // (y con disco externo, cortar el build).
+        if sleepActivity == nil {
+            sleepActivity = ProcessInfo.processInfo.beginActivity(options: [.idleSystemSleepDisabled, .userInitiated], reason: "ForkTikiLauncher: compilando un juego")
+        }
         isBuilding = true
         buildProgress = 0
         buildStepText = "Empezando…"
@@ -1897,24 +2214,38 @@ struct ContentView: View {
             isPaused = false
             buildProcessId = 0
             tikiFixApplied = false
+            if let act = sleepActivity {
+                ProcessInfo.processInfo.endActivity(act)
+                sleepActivity = nil
+            }
             if code == 0 {
                 buildProgress = 1
                 buildStepText = "Terminado"
                 status = "Build terminado. El IPA y el RomFS.img quedaron en: \(buildsDir.path)"
                 appendLog("✅ IPA y RomFS.img en: \(buildsDir.path)\n")
                 if deleteGameAfterBuild {
-                    let ipaPath = buildsDir.appendingPathComponent("\(selectedGame.name).ipa").path
-                    // El IPA de nxnative sale como <NombreDelJuego>.ipa en builds/,
-                    // o como OcarinaOfTime.ipa; solo borra si hay un IPA nuevo.
-                    let ipaFiles = (try? FileManager.default.contentsOfDirectory(atPath: buildsDir.path).filter { $0.hasSuffix(".ipa") }) ?? []
-                    if !ipaFiles.isEmpty {
-                        try? FileManager.default.removeItem(atPath: gameInputPath)
+                    // v48: solo cuenta un .ipa creado/modificado DURANTE este build
+                    // (antes bastaba cualquier .ipa viejo en builds/), buscando en
+                    // builds/ y en la carpeta de trabajo del juego.
+                    let fm = FileManager.default
+                    var fresh: [String] = []
+                    for dir in [buildsDir.path, workDir] {
+                        let names = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
+                        for n in names where n.hasSuffix(".ipa") {
+                            let full = (dir as NSString).appendingPathComponent(n)
+                            if let mod = (try? fm.attributesOfItem(atPath: full))?[.modificationDate] as? Date, mod >= buildStart {
+                                fresh.append(full)
+                            }
+                        }
+                    }
+                    if !fresh.isEmpty {
+                        try? fm.removeItem(atPath: gameInputPath)
                         status += " Juego original borrado para ahorrar espacio."
                         appendLog("Juego original borrado: \(gameInputPath)\n")
                     } else {
-                        status += " No se borró el juego porque no se encontró el IPA."
+                        status += " No se borró el juego porque no se encontró un IPA nuevo de este build."
+                        appendLog("No se borró el juego: no hay un .ipa creado durante este build en \(buildsDir.path) ni en \(workDir).\n")
                     }
-                    _ = ipaPath
                 }
             } else {
                 status = "El build terminó con error (código \(code)). Copia el log y mándamelo."

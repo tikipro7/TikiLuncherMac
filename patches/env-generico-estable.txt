@@ -1,0 +1,40 @@
+# Genérico Switch 2 — iPhone 15 Pro Max (A17 Pro, 8 GB). PERFIL "ESTABLE" (v50).
+# Para cualquier juego Switch 2 con nxnative (no solo Ocarina). Ocarina sigue con
+# SU perfil completo (env-iphone-15promax-estable.txt): este genérico es la base
+# con los 3 cambios estables, sin nada propio de Ocarina (sin su render 0.25,
+# sin image-family, sin task-isolate, sin su lista Potato).
+# Candidato SIN PROBAR: cada juego se mide aparte (ver docs/fork-generico-sw2.md).
+DM_FPS_TARGET=30
+# Para otros juegos SÍ es un cambio real (su perfil suele ser Docked): Handheld
+# = menos píxeles y menos memoria de render targets. En Ocarina no hace nada,
+# porque su perfil ya es handheld.
+DM_OPMODE=0
+DM_RENDER_SCALE=0.5
+DM_PRESENT_UPSCALE=off
+DM_UPSCALER=metalfx
+DM_PSO_PREBUILD=1
+DM_PSO_MTL4=1
+DM_PRESENT_SNAP=1
+DM_NVN_ENC_THREAD=1
+DM_FRAME_WG=0
+DM_QOS_MAP=1
+DM_QOS_EDGES=45,59
+DM_SHOW_FPS=0
+DM_METAL_HUD=0
+DM_TOUCH_HAPTICS=0
+DM_RUMBLE=0
+DM_PICTURE_FIT=fit
+# CAMBIO 1 — TEX_LAZY=1 (nvn_mtl.m tex_lazy): los pool walks no crean textura host
+# para ningún ID sin vista de 4 MB o más. Genérico NVN, vale para cualquier juego.
+DM_TEX_LAZY=1
+DM_TEX_LAZY_MIN_KB=4096
+# CAMBIO 2 — FPS_HOLD=off (hle_nvn.c fstep_tick): un frame tardío se muestra tarde
+# en vez de quedarse un vsync más. Genérico para juegos con frame step.
+DM_FPS_HOLD=off
+# TEX_RELEASE=1 primero (seguro); 2 solo si no hay texturas negras (ver doc genérico).
+DM_TEX_RELEASE=1
+# CAMBIO 3 ya va arriba: QOS_MAP=1 + EDGES 45,59 (hle_thread.c): hilos con QoS por
+# prioridad, menos calor. Genérico para cualquier juego.
+# NO va DM_PRESET=potato: muchos juegos no tienen lista Potato en su perfil y el
+# host lo marca [RED]. Tampoco van DM_NVN_IMAGE_FAMILY ni DM_NVN_ISOLATE_TASK:
+# son de Ocarina (V23 y su task Hi-Z).

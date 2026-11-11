@@ -1,0 +1,58 @@
+# iPhone 15 Pro Max (A17 Pro, 8 GB) — Ocarina of Time, kid X9. PERFIL "ESTABLE" (v49).
+# Objetivo: que los fps NO se vayan cayendo con los minutos (Metal que sube parado,
+# frames tardíos que se acumulan, calor). Es env-iphone-15promax.txt con 3 cambios
+# reales, cada uno verificado en el código de kid X9 a758ea2d (ver docs/iphone-estable-AB.md).
+# Candidato SIN PROBAR: compararlo contra el perfil normal siguiendo ese doc.
+#
+# NO lleva DM_PRESET=potato: dm_preset_apply lo aplica con setenv(...,1) y pisaría
+# el CAMBIO 1. La lista Potato va deletreada aquí, igual que en game.tsv.
+# Potato (game.tsv): evict 4400 MB, recycle 64 MB, alias sweep 600, PSO warm-only,
+# prepare 0, anon pools 512 MB, GMEM_NOBIG, TEX_LAZY 2 (min 4096 KB).
+DM_NVN_RES_EVICT_MB=4400
+DM_NVN_TEX_RECYCLE_MB=64
+DM_NVN_ALIAS_SWEEP=600
+DM_PSO_WARM_ONLY=1
+DM_PSO_PREPARE=0
+DM_POOL_ANON_MAX_MB=512
+DM_NVN_GMEM_NOBIG=1
+DM_TEX_LAZY_MIN_KB=4096
+# CAMBIO 1 — TEX_LAZY=1 en vez de 2 (nvn_mtl.m tex_lazy): los pool walks ya no crean
+# textura host para NINGÚN ID sin vista de 4 MB o más (con 2 solo saltaba los de
+# pools CPU_NO_ACCESS). Ataca el Metal que subía solo parado en la casa de Link.
+# Riesgo: pop-in de un frame en texturas grandes en Kokiri; si se ve, descartar.
+DM_TEX_LAZY=1
+DM_FPS_TARGET=30
+DM_RENDER_SCALE=0.25
+DM_UPSCALER=metalfx
+DM_PRESENT_UPSCALE=metalfx
+DM_TEX_RELEASE=1
+DM_PSO_MTL4=1
+DM_PSO_PREBUILD=1
+DM_WIDE_VIEW=0
+DM_RT=1
+DM_FRAME_WG=1
+DM_NVN_ENC_THREAD=1
+DM_GUEST_FILE=1
+DM_GUEST_FILE_PUNCH=1
+DM_NVN_IMAGE_FAMILY=1
+DM_NVN_ISOLATE_TASK=1
+DM_FRAMEGEN=0
+# CAMBIO 2 — FPS_HOLD=off (hle_nvn.c fstep_tick, DM_FPS_HOLD): un frame tardío se
+# muestra tarde en vez de quedarse un vsync más. En nxnative #1789 / PR #1927, los
+# frames de más de 25 ms bajaron de 137-290 a 22-24. El perfil ya trae fps_payback off
+# y link_latency30 2; este es el tercer ajuste de pacing que faltaba.
+DM_FPS_HOLD=off
+# CAMBIO 3 — QOS_MAP=1 + EDGES 45,59 (hle_thread.c): los hilos del juego toman su
+# clase QoS por prioridad en vez de correr todos en user-interactive. Menos CPU en
+# hilos de fondo = menos calor = menos bajada de reloj con los minutos. Apagado por
+# defecto "hasta que un A/B en teléfono muestre que ahorra sin tirar frames": esta
+# prueba ES ese A/B. Si los fps caen, quitar estas dos líneas.
+DM_QOS_MAP=1
+DM_QOS_EDGES=45,59
+# NO van aquí (verificados, no hacen nada en Ocarina):
+# - DM_OPMODE=0: el perfil ya es handheld (game.tsv op_mode handheld).
+# - DM_DYNAMIC_RESOLUTION=1: solo NieR Automata (hle_fpslock.c k_nier_dr); Ocarina
+#   no tiene esa capacidad (patches.py solo WIDE_VIEW).
+# - DM_NVN_ALLOC_CAP=16: ya es el default en X9 (ALLOC_DEFAULT 16, nvn_mtl.m).
+# - DM_TEX_RELEASE=2: corrompe texturas (magenta/negro tras cambiar de área).
+# - DM_NVN_FILE_WIRE: solo Mac (#if TARGET_OS_MAC); en iOS sería un no-op.

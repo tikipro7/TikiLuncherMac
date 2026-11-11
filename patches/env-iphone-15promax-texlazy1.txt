@@ -1,0 +1,65 @@
+# EXPERIMENTO (sin código) — iPhone 15 Pro Max, Ocarina X9 + variante iPhone.
+# Igual que env-iphone-15promax.txt pero con DM_TEX_LAZY=1 en vez de 2.
+# Ver port-ios/iphone/NO-MAS-BUFFERS.md §6: los pool walks dejan en dummy
+# TODAS las texturas sin vista de >=4096 KB, no solo las de pools
+# CPU_NO_ACCESS. Puede dar pop-in de un frame en texturas grandes al
+# aparecer en Kokiri; si se ve, descartar y volver a env-iphone-15promax.txt.
+#
+# SIN DM_PRESET=potato, a propósito: dm_preset_apply (loader.c) sobrescribe
+# las 9 vars de Potato con setenv(..., 1), así que con el preset puesto un
+# DM_TEX_LAZY=1 aquí no haría nada. La lista Potato va deletreada abajo,
+# con TEX_LAZY=1. Todo lo demás es idéntico al perfil iPhone.
+#
+# Copiar a Documents/env.txt del juego (o al env del launcher).
+# Probar: entrar en Kokiri, quedarse parado 60 s sin moverse, anotar
+# Metal / App / Available / FPS a 0 s, 30 s y 60 s.
+# Potato (game.tsv) deletreado: evict 4400 MB, recycle 64 MB, alias sweep 600,
+# PSO warm-only, prepare 0, anon pools 512 MB, GMEM_NOBIG, TEX_LAZY 1 (min 4096 KB).
+DM_NVN_RES_EVICT_MB=4400
+DM_NVN_TEX_RECYCLE_MB=64
+DM_NVN_ALIAS_SWEEP=600
+DM_PSO_WARM_ONLY=1
+DM_PSO_PREPARE=0
+DM_POOL_ANON_MAX_MB=512
+DM_NVN_GMEM_NOBIG=1
+DM_TEX_LAZY=1
+DM_TEX_LAZY_MIN_KB=4096
+DM_FPS_TARGET=30
+DM_RENDER_SCALE=0.25
+DM_UPSCALER=metalfx
+DM_PRESENT_UPSCALE=metalfx
+DM_TEX_RELEASE=1
+DM_PSO_MTL4=1
+DM_PSO_PREBUILD=1
+DM_WIDE_VIEW=0
+DM_RT=1
+DM_FRAME_WG=1
+DM_NVN_ENC_THREAD=1
+# Guest en archivos: en iOS se enciende solo cuando el pool del juego (9 GB)
+# no cabe en el hueco hasta el límite; aquí va explícito para documentarlo.
+# OJO: guest_file_thread para el juego (exit 87) si el disco baja de
+# DM_GUEST_FILE_MIN_FREE (default 5 GB): deja 15 GB libres en el iPhone.
+DM_GUEST_FILE=1
+# Parche 06 (on por defecto en el código; explícito aquí): lo que el juego
+# devuelve se perfora de los archivos del guest en vez de ocupar bloques en
+# disco. No baja phys_footprint directo: baja disco ocupado y páginas sucias.
+DM_GUEST_FILE_PUNCH=1
+# Parche 09 (on por defecto en el código; explícito aquí): familias de imagen
+# V23. Si aparecen artefactos de niebla, poner =0 y avisar (validar en Kokiri).
+DM_NVN_IMAGE_FAMILY=1
+# Parche 08 (off por defecto en el código; opt-in): aislamiento de la task
+# Hi-Z. En M1 16 GB quitó el cuelgue del tiler en 4/4 caminatas; en M5 Pro no
+# lo evitó y en M2 Pro costó +4.5 ms/frame. En A17 Pro sin medir: si el
+# stutter empeora, poner =0.
+DM_NVN_ISOLATE_TASK=1
+# Frame Generation de X9 (DM_FRAMEGEN, MetalFX, solo en el display link):
+# OFF por defecto aquí (nativo 30 primero). Para probarlo, poner =1: el juego
+# sigue a 30 y la pantalla muestra 60, con ~4 ms de GPU por frame interpolado
+# a 1080p (medido en M5; en A17 Pro sin medir) y +16.7 ms de latencia. Solo
+# funciona si la GPU tiene interpolador Metal 4 (supportsMetal4FX); si no,
+# el log avisa y sigue a 30. No es el FG del lab ni Netal.
+DM_FRAMEGEN=0
+# 07 file_wire NO va aquí: es solo Mac (#if TARGET_OS_MAC, mach_vm.h no está
+# en el SDK iOS). No poner DM_NVN_FILE_WIRE: en iOS sería un no-op silencioso.
+# LiveControls (parche 05) queda off: el toggle live de FG no está cableado:
+# DM_LIVE_CONTROLS=0

@@ -1,0 +1,608 @@
+diff --git a/dm/gfx/nvn/hle_nvn.c b/dm/gfx/nvn/hle_nvn.c
+index 8484a55..678033f 100644
+--- a/dm/gfx/nvn/hle_nvn.c
++++ b/dm/gfx/nvn/hle_nvn.c
+@@ -283,7 +283,11 @@ NVN(nvnMemoryPoolFlushMappedRange, void, const NVNmemoryPool *p, ptrdiff_t off,
+     if (!(o->flags & 0x200)) fl_add(o->mem + off, n);
+     ft_flush(o->mem + off, n);
+ }
+-NVN(nvnMemoryPoolGetBufferAddress, NVNbufferAddress, const NVNmemoryPool *p) { const pool_t *o = (const pool_t *)p; mtl_pool_buffer_addr(o->mem, o->size); return (NVNbufferAddress)o->mem; }
++// A4 (lab package): do not mark a SHADER_CODE pool as GPU storage just because the game took its buffer address. The shaders run translated, so the GPU never reads
++// that storage through this address, and marking it wired the whole pool into the residency set. Real uses as a buffer or a texture still incorporate the pool
++// (mtl_addr / mtl_gpu_addr / texture upload paths are unchanged). kid X9 called mtl_pool_buffer_addr unconditionally; nxnative main has the same guard via the
++// lab's V22 reference patch.
++NVN(nvnMemoryPoolGetBufferAddress, NVNbufferAddress, const NVNmemoryPool *p) { const pool_t *o = (const pool_t *)p; if (!(o->flags & NVN_MEMORY_POOL_FLAGS_SHADER_CODE)) mtl_pool_buffer_addr(o->mem, o->size); return (NVNbufferAddress)o->mem; }
+ 
+ // ---------- Descriptor pools ----------
+ // One ID space per pool. In NVN a texture or sampler ID indexes the pool the command buffer has bound (SetTexturePool / SetSamplerPool), and two pools may use the same IDs. The replay keeps
+diff --git a/dm/gfx/nvn/nvn_mtl.m b/dm/gfx/nvn/nvn_mtl.m
+index c6621eb..fff40e1 100644
+--- a/dm/gfx/nvn/nvn_mtl.m
++++ b/dm/gfx/nvn/nvn_mtl.m
+@@ -996,8 +996,7 @@ static int rel_wired(uintptr_t lo, uintptr_t hi) {   // whether a pool entry ove
+     for (int i = 0; i < g_npool; i++) if (g_pools[i].res && g_pools[i].lo < hi && g_pools[i].hi > lo) { w = 1; break; }
+     pthread_mutex_unlock(&g_mu); return w;
+ }
+-static int pool_find(uint64_t addr, uint64_t len) {
+-    if (g_nbig) { int b = big_of(addr); if (b >= 0) return big_lookup(&g_big[b], addr, len); }
++static int pool_held(uint64_t addr, uint64_t len) {   // the entry of g_pools holding [addr, addr + len), made by no lookup: an ordinary pool, or an existing chunk
+     if (g_plast >= 0 && g_plast < g_npool && addr >= g_pools[g_plast].lo && addr + len <= g_pools[g_plast].hi) return g_plast;
+     pidx_sort();
+     int lo = 0, hi = g_npool - 1, hit = -1;   // the last one whose start ≤ addr
+@@ -1006,15 +1005,30 @@ static int pool_find(uint64_t addr, uint64_t len) {
+     for (int i = 0; i < g_npool; i++) if (addr >= g_pools[i].lo && addr + len <= g_pools[i].hi) return g_plast = i;
+     return -1;
+ }
++// The entry for a GPU use of [addr, addr + len): a large pool's chunk is made or lengthened to reach as far as asked (big_lookup)
++static int pool_find(uint64_t addr, uint64_t len) {
++    if (g_nbig) { int b = big_of(addr); if (b >= 0) return big_lookup(&g_big[b], addr, len); }
++    return pool_held(addr, len);
++}
++// The entry that holds addr, or -1, making no buffer: a large pool answers with its stride's chunk if it has one. For questions no GPU use follows: through pool_find the pool walk
++// asked about every texture's storage and made a chunk of 80 MB and more for each stride (BIG_UNKNOWN past the address), or lengthened its chunk to that, 77 of them, 6.7 GB counted
++// by Metal, in Ocarina of Time's first area load (upstream 6f50de0, PR #2085). In kid the same question is asked by tex_storage_live, once per registered texture of every pool
++// walk, so the same chunks were made here. Caller holds g_mu
++static int pool_peek(uint64_t addr) {
++    if (g_nbig) { int b = big_of(addr); if (b >= 0) { const big_pool *bp = &g_big[b]; return bp->full ? bp->full - 1 : bp->chunk[(addr - bp->a) >> 24] - 1; } }
++    return pool_held(addr, 1);
++}
+ // Whether [addr, addr + len) lies in a pool the host maps, without putting that pool into the residency set as mtl_addr does: for a check that hands the GPU no address
+ static int mtl_addr_mapped(uint64_t addr, uint64_t len) {
+     if (pc_get(addr, len)) return 1;
+-    pthread_mutex_lock(&g_mu); int i = pool_find(addr, len); pthread_mutex_unlock(&g_mu);
+-    return i >= 0;
++    // A large pool is answered from its range, as upstream's mtl_addr_known does: asking through pool_find made the stride's 80 MB+ chunk for every texture
++    // of every pool walk (tex_storage_live). An ordinary pool is answered from the entries it already has (pool_held). Caller holds no lock here; g_mu is taken.
++    pthread_mutex_lock(&g_mu); int b = big_of(addr), ok = b >= 0 ? addr + len <= g_big[b].hi : pool_held(addr, len) >= 0; pthread_mutex_unlock(&g_mu);
++    return ok;
+ }
+ // Whether [addr, addr + len) lies in one memory pool, as mtl_addr finds it, without making the pool resident. hle_nvn.c keys_hash checks this way that a shader's code is mapped:
+ // through mtl_addr it made every pool holding shader code resident, which the GPU never reads, since the shaders run translated (Ocarina of Time: 222 pools, 334 MB)
+-int mtl_pool_holds(uint64_t addr, uint64_t len) { pthread_mutex_lock(&g_mu); int i = pool_find(addr, len); pthread_mutex_unlock(&g_mu); return i >= 0; }
++int mtl_pool_holds(uint64_t addr, uint64_t len) { pthread_mutex_lock(&g_mu); int b = big_of(addr), ok = b >= 0 ? addr + len <= g_big[b].hi : pool_held(addr, len) >= 0; pthread_mutex_unlock(&g_mu); return ok; }
+ int mtl_addr(uint64_t addr, uint64_t len, void **buf, uint64_t *off) {
+     const pc_ent *c = pc_get(addr, len);
+     if (c) { *buf = (__bridge void *)c->buf; *off = addr - c->base; return 1; }
+@@ -2367,8 +2381,16 @@ static nvn_hmap g_alias_gone = {.klen = sizeof(alias_key)};   // keys alias_reti
+ // Live GPU-only image descriptions, including those not used yet. A dynamic-resolution family declares its largest image before any particular resolution is used.
+ // Keeping only descriptions here lets its first allocation cover that family exactly, without allocating every resolution or rounding to a power of two.
+ static nvn_hmap g_image_desc = {.klen = 8};   // serial → malloc'ed tex_t, under g_smu
++// MAX: DM_NVN_IMAGE_FAMILY is ON by default (off only with =0). A COMPRESSIBLE render-target family may hold depth without IMAGE (backport of the V23 /
++// upstream PR #1936 rule, closed unmerged upstream; nxnative main already ships this rule unconditionally in image_shape). It changes which textures share
++// one image family; the lab warned of fog artefacts with shared windows, so validate the picture on device (fog zones, depth render targets) and set =0 to go back.
++static int image_family_on(void) { static int v = -1; if (v < 0) { const char *e = getenv("DM_NVN_IMAGE_FAMILY"); v = e ? atoi(e) != 0 : 1; if (v) MLOG("image families: COMPRESSIBLE render targets without IMAGE included (DM_NVN_IMAGE_FAMILY, on by default in MAX)"); } return v; }
++static int image_family(unsigned flags) {
++    if (!image_family_on()) return flags == (NVN_TEXTURE_FLAGS_COMPRESSIBLE | NVN_TEXTURE_FLAGS_IMAGE);
++    return (flags & NVN_TEXTURE_FLAGS_COMPRESSIBLE) && !(flags & (NVN_TEXTURE_FLAGS_DISPLAY | NVN_TEXTURE_FLAGS_VIDEO_DECODE | NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_SPARSE | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET));
++}
+ static int image_shape(const tex_t *t) {
+-    return t && t->pool && !t->has_layout && t->d.flags == (NVN_TEXTURE_FLAGS_COMPRESSIBLE | NVN_TEXTURE_FLAGS_IMAGE)
++    return t && t->pool && !t->has_layout && image_family(t->d.flags)
+         && t->d.target == NVN_TEXTURE_TARGET_2D && t->d.depth == 1 && t->d.levels == 1 && t->d.samples <= 1 && !t->d.stride;
+ }
+ static void image_desc_drop_pool(const void *pool) {   // caller holds g_smu
+@@ -7934,6 +7956,11 @@ static _Atomic uint64_t g_pb_built, g_pb_archived, g_pb_reused, g_pb_spec, g_pb_
+ static _Atomic uint64_t g_pt_hit_n, g_pt_hit_ns, g_pt_miss_n, g_pt_miss_ns, g_pt_spec_ns, g_pt_comp_ns, g_pt_pred_n, g_pt_pred_ns, g_pp_done_n;   // bases compiled / taken from the archive / reused, specializations, MTLDevice builds
+ typedef struct { const void *vf, *ff; uint32_t samples, a2c, rast, topo, amp; uint32_t va[31][3], vl[31][3]; } pbase_key;   // what a base depends on: pso_desc's descriptor less the colour attachments
+ static nvn_hmap g_pbase = {.klen = sizeof(pbase_key)};
++// Bases the archives do not have. pso4_init opens the archives once and nothing adds to them in a run, so a miss holds for the process: a later call for the base skips the search
++// (a compile 0 one returns nil, a compiling one goes straight to the compiler), and g_pbase, looked at first, takes the base once it is built. Without it every draw of a pipeline
++// whose build the full table refused searched every archive again while it drew with its stand-in (upstream PR #1825; Ocarina of Time's castle town, 9,208 searches / 30.5 s in
++// 300 frames, CPU translation 114 ms a frame). Ported from nxnative main (g_pbase_miss there); kid X9 had no miss map.
++static nvn_hmap g_pbase_miss = {.klen = sizeof(pbase_key)};
+ // Only callers for the same base wait on this group; unrelated bases compile in parallel.
+ // compiled: its owner asked the compiler (a compile 0 owner only looks in the archive, and a waiter that needs the base builds it itself when that found none).
+ @interface PbaseBuild : NSObject { @public dispatch_group_t done; id<MTLRenderPipelineState> ps; NSError *error; int compiled; } @end
+@@ -8326,11 +8353,13 @@ static id<MTLRenderPipelineState> pso_build_ex(MTLRenderPipelineDescriptor *d, N
+     MTL4RenderPipelineDescriptor *b = g_comp4 ? pso_desc4(d, rast) : nil;   // with rasterization off there is no colour state to leave open: the base is the pipeline
+     if (!b) { if (!compile) return nil; g_pb_legacy++; return pso_build_dev(d, e); }
+     pbase_key bk; pbase_key_of(d, &bk);
+-    id<MTLRenderPipelineState> base = nil; PbaseBuild *job = nil; int owner = 0;
++    id<MTLRenderPipelineState> base = nil; PbaseBuild *job = nil; int owner = 0, known = 0;
+     for (;;) {
+         os_unfair_lock_lock(&g_pbase_lock);
+         base = hm_get_id(&g_pbase, &bk); job = nil; owner = 0;
+         if (!base) {
++            known = hm_get_id(&g_pbase_miss, &bk) != nil;
++            if (known && !compile) { os_unfair_lock_unlock(&g_pbase_lock); return nil; }
+             job = hm_get_id(&g_pbase_pending, &bk);
+             if (!job) { job = [PbaseBuild new]; job->done = dispatch_group_create(); dispatch_group_enter(job->done); hm_put_id(&g_pbase_pending, &bk, job); owner = 1; }
+         }
+@@ -8346,9 +8375,9 @@ static id<MTLRenderPipelineState> pso_build_ex(MTLRenderPipelineDescriptor *d, N
+     else {
+         uint64_t t0 = bp_now();
+         int vd = 0; for (int i = 0; i < 31 && !vd; i++) vd = bk.va[i][0] != 0;   // a vertex layout (MTLVertexFormatInvalid is 0)
+-        if (!vd) for (id<MTL4Archive> a in g_arch4p) if ((base = [a newRenderPipelineStateWithDescriptor:b error:nil])) break;
++        if (!known && !vd) for (id<MTL4Archive> a in g_arch4p) if ((base = [a newRenderPipelineStateWithDescriptor:b error:nil])) break;
+         int from_run = 0;
+-        if (!base) for (id<MTL4Archive> a in g_arch4) if ((base = [a newRenderPipelineStateWithDescriptor:b error:nil])) { from_run = 1; break; }
++        if (!known && !base) for (id<MTL4Archive> a in g_arch4) if ((base = [a newRenderPipelineStateWithDescriptor:b error:nil])) { from_run = 1; break; }
+         uint64_t t1 = bp_now();
+         if (base) { g_pb_archived++; g_pt_hit_n++; g_pt_hit_ns += t1 - t0; }
+         if (base && from_run && g_compact_enabled && atomic_load(&g_warm_running)) {
+@@ -8369,6 +8398,7 @@ static id<MTLRenderPipelineState> pso_build_ex(MTLRenderPipelineDescriptor *d, N
+         os_unfair_lock_lock(&g_pbase_lock);
+         job->ps = base;
+         if (base) hm_put_id(&g_pbase, &bk, base);
++        else if (!known) hm_put_id(&g_pbase_miss, &bk, NSNull.null);   // searched and not there, compiled or not
+         hm_rel(nvn_hm_del(&g_pbase_pending, &bk)); dispatch_group_leave(job->done);
+         os_unfair_lock_unlock(&g_pbase_lock);
+         if (!base) { if (compile && e) *e = job->error; return nil; }   // NOLINT(clang-analyzer-osx.cocoa.RetainCount): job stays in g_pbase_pending (hm_put_id's CFBridgingRetain) until hm_rel releases it, not a leak
+@@ -12700,7 +12730,29 @@ static void draw_multi(const p_multi_draw *m) {
+     g_mdxc.next = NULL;
+ }
+ static void draw_(const p_draw *dw, const p_draw_idx *di);
+-static void draw(const p_draw *dw, const p_draw_idx *di) { cp_stamp start = cp_begin(); if (dw && dw->prim == DM_PRIM_MESH_TASKS) mesh_tasks_draw(dw); else draw_(dw, di); cp_end(5, start); }
++static void task_isolate_boundary(void);
++// PR #1842 task isolation (opt-in, off by default): whether the current
++// task/mesh draw's task shader matches the isolate list. DM_NVN_ISOLATE_TASK
++// unset or 0 = off; 1 = the PR's Hi-Z task a5288d0a6c4971fd; a comma list
++// names other task-key prefixes (max 8, like DM_NVN_DEPTHOVR). The task
++// shader is pr->sh[3]; its key is 16 hex chars. This is a diagnostic
++// stopgap, not a fix: the tiler hazard inside the driver stays open.
++static int task_isolate_hit(void) {
++    static char keys[8][24]; static int nkeys = -1;
++    if (nkeys < 0) {
++        nkeys = 0; const char *e = getenv("DM_NVN_ISOLATE_TASK");
++        if (e && *e && strcmp(e, "0")) {
++            if (!strcmp(e, "1")) { memcpy(keys[0], "a5288d0a6c4971fd", 17); keys[0][17] = 0; nkeys = 1; }
++            else for (const char *q = e; q && *q && nkeys < 8; q = strchr(q, ',') ? strchr(q, ',') + 1 : q + strlen(q)) { size_t n = strcspn(q, ","); if (n > 23) n = 23; memcpy(keys[nkeys], q, n); keys[nkeys][n] = 0; nkeys++; }
++        }
++    }
++    if (!nkeys) return 0;
++    __unsafe_unretained NvProg *pr = S.prog ? prog_get(S.prog) : nil; NvShader *task = pr ? pr->sh[3] : nil;
++    if (!task) return 0;
++    for (int i = 0; i < nkeys; i++) if (!strncmp(task->key, keys[i], strlen(keys[i]))) return 1;
++    return 0;
++}
++static void draw(const p_draw *dw, const p_draw_idx *di) { cp_stamp start = cp_begin(); if (dw && dw->prim == DM_PRIM_MESH_TASKS) { int iso = task_isolate_hit(); if (iso) task_isolate_boundary(); mesh_tasks_draw(dw); if (iso) task_isolate_boundary(); } else draw_(dw, di); cp_end(5, start); }
+ static void draw_(const p_draw *dw, const p_draw_idx *di) {
+     g_draw_binst = (uint32_t)(dw ? dw->base_instance : di ? di->base_instance : 0);   // c0 + 0x644 of the stages that read the driver segment (encode_args)
+     if (passdump()) { NvProg *p = g_geo_program ? g_geo_program : S.prog ? prog_get(S.prog) : nil;
+@@ -13977,10 +14029,10 @@ static void sub_cut_begin(void) { g_cut_draw0 = g_stat_draw; }
+ // DM_FSTEP_PROBE_RAMP=1 (default) / 0 / ab: a frame-step probe's grace is renewed while its frames keep getting cheaper (nvn_fstep.h FSTEP_RAMP), the time macOS's GPU clock takes to rise for the shorter deadline
+ static int probe_ramp_mode(void) { static int m = -1; if (m < 0) m = sw_mode("DM_FSTEP_PROBE_RAMP", 1); return m; }
+ int mtl_probe_ramp_on(void) { return sw_on(probe_ramp_mode()); }
+-static void sub_cut(void) {
++static void sub_cut_impl(int force) {
+     int n = cut_draws();
+     if (!g_cb || g_enc) return;
+-    if ((!g_cut_copy && (n <= 0 || g_stat_draw - g_cut_draw0 < (uint64_t)n)) || g_hoist_n || g_defer_nact || g_defer_pend || g_fz.active || g_rt_merged) return;
++    if ((!force && !g_cut_copy && (n <= 0 || g_stat_draw - g_cut_draw0 < (uint64_t)n)) || g_hoist_n || g_defer_nact || g_defer_pend || g_fz.active || g_rt_merged) return;
+     if (g_cut_copy) g_copy_cuts++;
+     g_cut_copy = 0;
+     if (g_blit) { enc_b_end(g_blit); g_blit = nil; }
+@@ -14003,6 +14055,8 @@ static void sub_cut(void) {
+     g_cut_draw0 = g_stat_draw;
+     if (!g_cuts++) MLOG("segmented submission: first segment submitted at frame %llu pass %llu", (unsigned long long)f, (unsigned long long)g_stat_pass);
+ }
++static void sub_cut(void) { sub_cut_impl(0); }
++static void task_isolate_boundary(void) { rp_end(); sub_cut_impl(1); static int logged; if (!logged++) MLOG("task isolation (DM_NVN_ISOLATE_TASK): command-buffer boundaries around matching task/mesh draws; root cause still open (PR #1842)"); }
+ uint64_t mtl_cut_count(void) { return g_cuts; }
+ uint64_t mtl_copy_cut_count(void) { return g_copy_cuts; }
+ 
+diff --git a/dm/gfx/tests/t_pool_chunks.m b/dm/gfx/tests/t_pool_chunks.m
+index 214c6d3..cdac85e 100644
+--- a/dm/gfx/tests/t_pool_chunks.m
++++ b/dm/gfx/tests/t_pool_chunks.m
+@@ -30,8 +30,13 @@ int main(void) { @autoreleasepool {
+     mtl_pool_add(mem, GB);
+     CHECK("no buffer until a lookup", g_npool == pools0 && g_nbig == 1);
+     CHECK("overlapping buffers: barriers carry alias visibility", resource_vis() & MTL4VisibilityOptionResourceAlias);
++    pthread_mutex_lock(&g_mu); int peeked = pool_peek(base + 100), peek_chunks = g_npool; pthread_mutex_unlock(&g_mu);
++    CHECK("asking where an address is (the pool walk's statistics) makes no chunk", peeked == -1 && peek_chunks == pools0);
+     id<MTLBuffer> a = look(base + 100, 4096);
+     CHECK("one chunk", g_npool == pools0 + 1);
++    pthread_mutex_lock(&g_mu); int in_stride = pool_peek(base + 9 * MB), other = pool_peek(base + 300 * MB), n_after = g_npool; pthread_mutex_unlock(&g_mu);
++    CHECK("peek finds the chunk of a stride that has one", in_stride >= 0 && g_pools[in_stride].buf == a);
++    CHECK("peek of a stride with none: -1, and still no new chunk", other == -1 && n_after == pools0 + 1);
+     CHECK("a chunk is far smaller than the pool", a.length <= 3 * BIG_S);
+     CHECK("the same stride: the same buffer", look(base + 200, 4096) == a);
+     CHECK("no more chunks", g_npool == pools0 + 1);
+diff --git a/dm/gfx/tests/t_pso_archive.m b/dm/gfx/tests/t_pso_archive.m
+index e9f6484..17bc11b 100644
+--- a/dm/gfx/tests/t_pso_archive.m
++++ b/dm/gfx/tests/t_pso_archive.m
+@@ -285,6 +285,37 @@ static void spec_desc_ownership(void) {
+         }
+     }
+ }
++// Deterministic misses while the real Metal compiler remains available: a miss
++// must suppress repeated probes, not suppress demand compilation or another key.
++@interface MissingBaseArchive : NSObject { @public unsigned calls; } @end
++@implementation MissingBaseArchive
++- (id<MTLRenderPipelineState>)newRenderPipelineStateWithDescriptor:(MTL4RenderPipelineDescriptor *)d error:(NSError **)e {
++    (void)d; (void)e; calls++; return nil;
++}
++@end
++static void repeated_archive_miss(void) {
++    NSArray *saved = g_arch4, *savedp = g_arch4p;
++    MissingBaseArchive *archive = [MissingBaseArchive new];
++    g_arch4 = @[(id<MTL4Archive>)archive]; g_arch4p = @[];
++    MTLRenderPipelineDescriptor *d = desc(MTLPixelFormatRGBA8Unorm, 0, MTLPixelFormatRGBA8Unorm, MTLColorWriteMaskAll, 1);
++    d.vertexDescriptor.layouts[16].stride = 1536;
++    NSError *e = nil;
++    for (int i = 0; i < 100; i++) EXPECT("negative probe: no archived pipeline", 1, pso_build_ex(d, &e, 0) == nil);
++    EXPECT("negative probe: one lookup for 100 misses", 1, archive->calls);
++    EXPECT("negative probe: no unfinished owner", 0, g_pbase_pending.n);
++    d.vertexDescriptor.layouts[16].stride = 1552;
++    EXPECT("negative probe: another layout is independent", 1, pso_build_ex(d, &e, 0) == nil);
++    EXPECT("negative probe: another key looked up", 2, archive->calls);
++    d.vertexDescriptor.layouts[16].stride = 1536;
++    EXPECT("negative probe: demand can still compile", 1, pso_build_ex(d, &e, 1) != nil);
++    unsigned after = archive->calls;
++    EXPECT("negative probe: compiled base overrides miss", 1, pso_build_ex(d, &e, 0) != nil);
++    EXPECT("negative probe: completed base needs no archive scan", after, archive->calls);
++    g_arch4 = saved; g_arch4p = savedp;
++    nvn_hm_clear(&g_pbase_miss, hm_rel);
++}
++
++
+ int main(int argc, char **argv) { @autoreleasepool {
+     if (!mkdtemp(archive_cache_root)) abort();
+     atexit(archive_cache_cleanup);
+@@ -483,6 +514,7 @@ int main(int argc, char **argv) { @autoreleasepool {
+         EXPECT("constants: the vertex function given to it is specialized once", 1, fn_dev(cv) != cv && fn_dev(cv) == fn_dev(cv));
+         EXPECT("constants: a function without constants is its own", 1, fn_dev(cd.fragmentFunction) == cd.fragmentFunction);
+     }
++    repeated_archive_miss();
+     spec_desc_ownership();
+     capture_preserves_foreign_folder();
+     [NSFileManager.defaultManager removeItemAtPath:@(dir) error:nil];
+diff --git a/dm/host/hle_svc.c b/dm/host/hle_svc.c
+index 5ab7848..fa3064c 100644
+--- a/dm/host/hle_svc.c
++++ b/dm/host/hle_svc.c
+@@ -42,6 +42,7 @@ void dm_guest_heap_range(uint64_t *base, size_t *open_len) {
+ static uint8_t *g_alias; static size_t g_alias_cap;
+ static _Atomic uint64_t *g_alias_bits;   // alias region page bitmap (alias_pages)
+ static uint64_t *g_alias_exposed;   // one bit per host page ever opened; protected by g_map_lock
++static uint64_t *g_alias_rel, *g_alias_aged;   // guest files: host pages of the alias region given back and not punched yet, and those of them already given back at the last sweep (g_map_lock)
+ static uint8_t *g_stack; static size_t g_stack_cap;
+ // The address lies in the guest address block (every guest thread stack is here: the game's own heap or the stack region); the big-stack entry (hle_bigstack.c) uses it to decide whether to switch stacks
+ int dm_guest_as_contains(uintptr_t a) { uintptr_t b = (uintptr_t)g_as; return g_as && a >= b && a - b < g_reserve; }
+@@ -68,12 +69,15 @@ static size_t env_size(const char *name, size_t min, size_t align) {
+ // Any failure leaves the guest anonymous, with a [RED] line: a file that cannot be made, unlinked, given class C on iOS (in a class that closes when the phone locks, its pages could not be read or
+ // written out while it is locked), sized or mapped; and a disk with less free space than DM_GUEST_FILE_MIN_FREE (default 5G), on the Mac that and 8 GB, as it can swap instead. A file is unlinked before
+ // it is sized, so one left behind holds nothing. guest_file_thread stops the game when the disk falls under the minimum later. What the game gives back only goes PROT_NONE in the files (guest_release)
+-// and reads 0 when it is opened again (alias_initialize, SetHeapSize)
++// and reads 0 when it is opened again (alias_initialize, SetHeapSize). What the game gives back is punched out of the files (guest_file_punch, upstream main): the heap at once, the alias region by the sweep once it has stayed given back over a whole sweep interval
+ int proc_pid_rusage(int pid, int flavor, rusage_info_t *buffer);   // libproc.h, which the iOS SDK does not have
+ #define GF_MAX 1024
+ static int g_gf_tab[GF_MAX];       // the files, open for reading and writing
+ static int g_gf_n;                 // how many; 0 while the guest is anonymous. Set by mem_init_once, whose pthread_once orders it before every reader
+ static uint64_t g_gf_min_free;     // DM_GUEST_FILE_MIN_FREE in bytes: the free space on the files' disk under which the game is stopped; 0 = never
++static int g_gf_punch = 1;         // DM_GUEST_FILE_PUNCH=0: what the game gives back keeps its disk blocks (only PROT_NONE), as before (upstream main)
++static _Atomic uint64_t g_gf_punched;   // bytes given back as holes (guest_file_punch)
++static void guest_file_sweep(void);
+ 
+ // Every second the free space on the files' disk (they all lie on one volume): under DM_GUEST_FILE_MIN_FREE the game is stopped (exit code 87; the memory watchdog's is 86, hle_nvn.c), before a full
+ // disk leaves the kernel no room to write the guest's pages out, nor a phone's system any room. Every 10th second one line, [RED] under 2 GB free: what the disk cost so far and the footprint's parts
+@@ -81,6 +85,7 @@ static void *guest_file_thread(void *arg) {
+     (void)arg; const double G = 1073741824.0;
+     for (unsigned sec = 1;; sec++) {
+         sleep(1);
++        if (sec % 10 == 0) guest_file_sweep();
+         struct statfs fs; struct rusage_info_v4 ru; task_vm_info_data_t vi; mach_msg_type_number_t n = TASK_VM_INFO_COUNT; struct stat st;
+         int fs_ok = !fstatfs(g_gf_tab[0], &fs); double avail = fs_ok ? (double)fs.f_bavail * fs.f_bsize / G : -1, held = 0;
+         if (fs_ok && g_gf_min_free && (uint64_t)fs.f_bavail * fs.f_bsize < g_gf_min_free) {
+@@ -91,8 +96,8 @@ static void *guest_file_thread(void *arg) {
+         for (int i = 0; i < g_gf_n; i++) if (!fstat(g_gf_tab[i], &st)) held += st.st_blocks * 512.0;
+         int ru_ok = !proc_pid_rusage(getpid(), RUSAGE_INFO_V4, (rusage_info_t *)&ru);
+         if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vi, &n) != KERN_SUCCESS) memset(&vi, 0, sizeof vi);
+-        LOG("%s[mem] guest file: %.2f GB allocated on disk; process read %.2f GB, %llu page-ins, logical writes %.2f GB; footprint %.2f GB (internal %.2f, compressed %.2f, peak so far %.2f), file pages mapped (external) %.2f GB; %.1f GB free on its disk",
+-            avail >= 0 && avail < 2 ? "[RED] " : "", held / G, ru_ok ? ru.ri_diskio_bytesread / G : -1, ru_ok ? (unsigned long long)ru.ri_pageins : 0ull,
++        LOG("%s[mem] guest file: %.2f GB allocated on disk, %.2f GB given back as holes; process read %.2f GB, %llu page-ins, logical writes %.2f GB; footprint %.2f GB (internal %.2f, compressed %.2f, peak so far %.2f), file pages mapped (external) %.2f GB; %.1f GB free on its disk",
++            avail >= 0 && avail < 2 ? "[RED] " : "", held / G, atomic_load(&g_gf_punched) / G, ru_ok ? ru.ri_diskio_bytesread / G : -1, ru_ok ? (unsigned long long)ru.ri_pageins : 0ull,
+             ru_ok ? ru.ri_logical_writes / G : -1, vi.phys_footprint / G, vi.internal / G, vi.compressed / G, ru_ok ? ru.ri_lifetime_max_phys_footprint / G : -1, vi.external / G, avail);
+     }
+     return NULL;
+@@ -183,7 +188,8 @@ static void guest_file_init(void) {
+     else if (!confstr(_CS_DARWIN_USER_TEMP_DIR, dir, sizeof dir)) { LOG("[RED] [mem] guest memory: anonymous (DM_GUEST_FILE: no temporary folder, errno %d)", errno); return; }
+     if (!guest_files_map(dir, chunk, n, &fs, why, sizeof why)) { LOG("[RED] [mem] guest memory: anonymous (DM_GUEST_FILE: %s)", why); return; }
+     g_gf_n = n;
+-    LOG("[mem] guest memory: %d files of %.2f GB in %s (unlinked, sparse, shared), %.2f GB in all, on the %s volume, %.1f GB free on it", n, chunk / G, dir, g_reserve / G, fs.f_fstypename, (double)fs.f_bavail * fs.f_bsize / G);
++    { const char *pu = getenv("DM_GUEST_FILE_PUNCH"); if (pu && *pu) g_gf_punch = atoi(pu) > 0; }
++    LOG("[mem] guest memory: %d files of %.2f GB in %s (unlinked, sparse, shared), %.2f GB in all, on the %s volume, %.1f GB free on it; holes punched where the game gives memory back: %s", n, chunk / G, dir, g_reserve / G, fs.f_fstypename, (double)fs.f_bavail * fs.f_bsize / G, g_gf_punch ? "on" : "off (DM_GUEST_FILE_PUNCH=0)");
+     if (strcmp(fs.f_fstypename, "apfs") || !(fs.f_flags & MNT_LOCAL)) LOG("[RED] [mem] guest file: not on a local APFS volume, where it may not be sparse, or be slow");
+     pthread_t th; int rc = pthread_create(&th, NULL, guest_file_thread, NULL);
+     if (!rc) pthread_detach(th);
+@@ -217,6 +223,7 @@ static void mem_init_once(void) {
+     g_heap  = g_stack + g_stack_cap; g_heap_cap  = g_reserve - (size_t)(g_heap - g_as);
+     if (!(g_alias_bits = calloc((g_alias_cap >> 18) + 1, sizeof *g_alias_bits))) die("alias region page bitmap calloc");
+     if (!(g_alias_exposed = calloc(g_alias_cap / pg / 64 + 1, sizeof *g_alias_exposed))) die("alias exposure bitmap calloc");
++    if (!(g_alias_rel = calloc(g_alias_cap / pg / 64 + 1, sizeof *g_alias_rel)) || !(g_alias_aged = calloc(g_alias_cap / pg / 64 + 1, sizeof *g_alias_aged))) die("alias release bitmap calloc");
+     LOG("guest AS %p +%#llx  heap %p alias %p stack %p", g_as, (unsigned long long)g_reserve, g_heap, g_alias, g_stack);
+     const char *aw = getenv("DM_ALIAS_WINDOWS");
+     if (aw && atoi(aw) > 0) { pthread_t th; if (!pthread_create(&th, NULL, alias_windows_thread, (void *)(uintptr_t)atoi(aw))) pthread_detach(th); }
+@@ -339,13 +346,48 @@ static void alias_query(uint64_t addr, uint64_t *base, uint64_t *size, int *mapp
+     uint64_t hi = alias_run_end(p, g_alias_cap >> 12, *mapped);
+     *base = (uintptr_t)g_alias + (lo << 12); *size = (hi - lo) << 12;
+ }
++// Give the files' blocks under [lo, hi) (whole host pages, inside the block) back to the disk with F_PUNCHHOLE. Over a mapped range it also drops the pages, written out or still dirty, and they read 0
++// again (measured on the Mac by upstream: a 64 MB shared mapping, half written out: blocks 32 MB -> 16 MB after punching a written and a dirty quarter, both read 0, and a later msync writes nothing for them). A
++// wired page (mlock, as under a Metal no-copy buffer the GPU still holds) keeps its bytes and is written back later, so the caller still zeroes the range when it is opened again (guest_zero, which
++// leaves a page that reads 0 untouched). Without it a range the game unmaps keeps its blocks until the end, and a range mapped elsewhere takes new ones: on the iPad the files held 6.6 GB with
++// 2.5 GB of the alias region mapped, mapped up to +3.8 GB (upstream main). Ported from nxnative main; kid X9 did not have it.
++static void guest_file_punch(uintptr_t lo, uintptr_t hi) {
++    while (lo < hi) {
++        size_t off = lo - (uintptr_t)g_as, k = off / g_gf_chunk, in = off - k * g_gf_chunk, fsz = (int)k == g_gf_n - 1 ? g_reserve - k * g_gf_chunk : g_gf_chunk;
++        size_t len = hi - lo < fsz - in ? hi - lo : fsz - in;
++        fpunchhole_t ph = {0}; ph.fp_offset = (off_t)in; ph.fp_length = (off_t)len;
++        if (!fcntl(g_gf_tab[k], F_PUNCHHOLE, &ph)) atomic_fetch_add(&g_gf_punched, len);
++        else { static _Atomic int nred; if (atomic_fetch_add(&nred, 1) < 4) LOG("[RED] [mem] guest file: F_PUNCHHOLE file %zu +%#zx+%#zx failed (errno %d): the range keeps its disk blocks", k, in, len, errno); }
++        lo += len;
++    }
++}
++// Punch the alias region's host pages that the game gave back before the last sweep and has not mapped again since (g_alias_aged), then age the ones given back since. Under g_map_lock,
++// so no MapPhysicalMemory opens a page while it is punched. Called by guest_file_thread every 10 s
++static void guest_file_sweep(void) {
++    if (!g_gf_punch || !g_alias_rel) return;
++    size_t pg = (size_t)getpagesize(), nw = g_alias_cap / pg / 64 + 1;
++    pthread_mutex_lock(&g_map_lock);
++    for (size_t w = 0; w < nw; w++) {
++        uint64_t a = g_alias_aged[w];
++        while (a) {   // runs of set bits in the word, each punched as one range
++            unsigned b = (unsigned)__builtin_ctzll(a), e = b; while (e < 64 && (a >> e & 1)) e++;
++            guest_file_punch((uintptr_t)g_alias + (w * 64 + b) * pg, (uintptr_t)g_alias + (w * 64 + e) * pg);
++            a &= e == 64 ? 0 : ~UINT64_C(0) << e;
++        }
++        g_alias_rel[w] &= ~g_alias_aged[w];
++        g_alias_aged[w] = g_alias_rel[w];
++    }
++    pthread_mutex_unlock(&g_map_lock);
++}
+ // Give guest memory back to the system: a fresh inaccessible mapping over [lo, hi), whole host pages. mprotect(PROT_NONE) alone keeps every page resident and dirty, only
+ // out of phys_footprint, and madvise(MADV_FREE) does nothing to pages that are not writable, though it returns 0 (1 GiB on the Mac: 1,024 MiB still resident and dirty; this: 0).
+ // A memory pool's no-copy buffer over the range keeps the old pages for the GPU work still using it until the buffer goes. Returns 1 when the range now holds zero pages;
+ // on failure the range is only inaccessible, with its old bytes.
+ // With the guest in files (DM_GUEST_FILE), an anonymous mapping over the range would turn it into anonymous memory, which phys_footprint charges again as soon as the game maps
+-// it back, so the files' range only goes PROT_NONE: its pages stay file pages, out of the footprint, which the kernel writes out when it needs the room;
+-// they keep their old bytes, so the call returns 0 and alias_initialize zeroes them when they are mapped again
++// it back, so the files' range goes PROT_NONE and its blocks are punched out (guest_file_punch): the pages are dropped and the disk gets the room back. A wired page can keep its old
++// bytes, so the call returns 0 and alias_initialize zeroes what does not read 0 when they are mapped again
++// alias: the range lies in the alias region, where the game maps and unmaps the same ranges every frame (Zelda: about 0.5 GB a second): punching those at once would make every page fault
++// in again from a hole; they are only marked (g_alias_rel), and guest_file_sweep punches those still given back after a whole sweep interval. The heap's are punched at once
+ // Memory pools out of the guest files (DM_GUEST_FILE; DM_POOL_ANON=0 keeps them in): a pool's pages go back to anonymous memory when the game makes the pool (nvnMemoryPoolInitialize,
+ // before the graphics layer wraps it in a zero-copy buffer or tracks its writes). Metal wires a zero-copy buffer's pages while it is resident, and the raw global memory table makes
+ // every pool resident: The Legend of Zelda: Ocarina of Time (Switch 2) with its pools over file pages stalled up to a second a frame on pages coming back, and one run ended in a
+@@ -452,10 +494,12 @@ int dm_guest_range_in_files(const void *mem, size_t size) {   // nvn_dirty_disca
+     pthread_mutex_unlock(&g_anon_mu);
+     return !in_anon;
+ }   // nvn_dirty_discard: an anonymous mapping over the files' range would undo them
+-static int guest_release(uintptr_t lo, uintptr_t hi) {
++static int guest_release(uintptr_t lo, uintptr_t hi, int alias) {
+     if (g_gf_n) {
+         anon_release(lo, hi);   // a pool's anonymous pages (dm_guest_pool_anon) go, its files' are back
+         if (mprotect((void *)lo, hi - lo, PROT_NONE)) die("guest_release mprotect %#lx+%#lx errno=%d", (unsigned long)lo, (unsigned long)(hi - lo), errno);
++        if (g_gf_punch && !alias) guest_file_punch(lo, hi);
++        else if (g_gf_punch) { size_t pg = (size_t)getpagesize(); for (uint64_t h = (lo - (uintptr_t)g_alias) / pg, e = (hi - (uintptr_t)g_alias) / pg; h < e; h++) g_alias_rel[h >> 6] |= UINT64_C(1) << (h & 63); }
+         return 0;
+     }
+     if (mmap((void *)lo, hi - lo, PROT_NONE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0) != MAP_FAILED) return 1;
+@@ -762,7 +806,7 @@ uint64_t svc_dispatch(int num, uint64_t *regs, uint64_t orig_addr) {
+         }
+         int rc = 0;
+         if (size > g_heap_cur) rc = mprotect(g_heap + g_heap_cur, size - g_heap_cur, PROT_READ | PROT_WRITE);
+-        else if (size < g_heap_cur) (void)guest_release((uintptr_t)g_heap + size, (uintptr_t)g_heap + g_heap_cur);
++        else if (size < g_heap_cur) (void)guest_release((uintptr_t)g_heap + size, (uintptr_t)g_heap + g_heap_cur, 0);
+         if (rc) die("SetHeapSize mprotect failed: req=%#zx errno=%d", size, errno);
+         // With the guest in files a heap given back kept its old bytes (guest_release): one that grows back over them reads 0 there, as the fresh mapping reads without the files
+         if (size > g_heap_cur && g_heap_seen > g_heap_cur && g_gf_n) guest_zero(g_heap + g_heap_cur, (size < g_heap_seen ? size : g_heap_seen) - g_heap_cur);
+@@ -928,7 +972,9 @@ uint64_t svc_dispatch(int num, uint64_t *regs, uint64_t orig_addr) {
+                 if (mprotect((void *)mlo, mhi - mlo, PROT_READ | PROT_WRITE))
+                     die("SVC %#x mprotect %p+%#zx errno=%d", num, (void *)a, size, errno);
+                 dm_guest_write_prepare((void *)mlo, mhi - mlo);
+-            } else if (guest_release(mlo, mhi)) {   // fresh zero pages: alias_initialize has nothing to clear when they are mapped again
++                if (g_gf_n) for (uint64_t h = (mlo - (uintptr_t)g_alias) / pg, e = (mhi - (uintptr_t)g_alias) / pg; h < e; h++) {   // in use again: not to be punched
++                    uint64_t m = ~(UINT64_C(1) << (h & 63)); g_alias_rel[h >> 6] &= m; g_alias_aged[h >> 6] &= m; }
++            } else if (guest_release(mlo, mhi, 1)) {   // fresh zero pages: alias_initialize has nothing to clear when they are mapped again
+                 for (uint64_t h = (mlo - (uintptr_t)g_alias) / pg, last = (mhi - 1 - (uintptr_t)g_alias) / pg; h <= last; ++h)
+                     g_alias_exposed[h >> 6] &= ~(UINT64_C(1) << (h & 63));
+             }
+diff --git a/dm/host/live_controls.c b/dm/host/live_controls.c
+new file mode 100644
+index 0000000..f5013a2
+--- /dev/null
++++ b/dm/host/live_controls.c
+@@ -0,0 +1,48 @@
++// Live controls implementation. See live_controls.h for the port notes.
++// Self-contained: libc + pthread + stdatomic only, so the host test builds it
++// without the game profile. Logging is a local macro, not the host's MLOG/LOG.
++#include <stdio.h>
++#include <stdlib.h>
++#include <stdint.h>
++#include <pthread.h>
++#include <stdatomic.h>
++#include "live_controls.h"
++#ifndef LIVE_LOG
++#define LIVE_LOG(...) do { flockfile(stderr); fprintf(stderr, "[dm] [live] " __VA_ARGS__); fputc('\n', stderr); funlockfile(stderr); } while (0)
++#endif
++// UI changes publish one atomic configuration; render and present threads never mutate the environment.
++static pthread_once_t g_live_once = PTHREAD_ONCE_INIT;
++static _Atomic unsigned g_live_flags, g_live_generation;
++static _Atomic int g_live_status;
++static _Atomic uint64_t g_live_gpu_us;
++static void live_init(void) {
++    const char *e = getenv("DM_LIVE_CONTROLS"); if (!e || atoi(e) != 1) return;
++    e = getenv("DM_LIVE_NATIVE_FPS"); unsigned flags = LIVE_ENABLED | LIVE_720 | LIVE_ADAPT | LIVE_ISOLATE;
++    if (e && atoi(e) == 30) flags |= LIVE_CAP30;
++    atomic_store(&g_live_flags, flags); atomic_store(&g_live_generation, 1);
++    LIVE_LOG("controls enabled; native target=%d, framegen off", flags & LIVE_CAP30 ? 30 : 60);
++}
++unsigned dm_live_flags(void) { pthread_once(&g_live_once, live_init); return atomic_load(&g_live_flags); }
++unsigned dm_live_generation(void) { dm_live_flags(); return atomic_load(&g_live_generation); }
++int dm_live_target(void) { unsigned s = dm_live_flags(); return s & LIVE_ENABLED ? (s & LIVE_CAP30 ? 30 : 60) : 0; }
++int dm_live_status(void) { return atomic_load(&g_live_status); }
++uint64_t dm_live_gpu_us(void) { return atomic_load(&g_live_gpu_us); }
++void dm_live_note(int status, uint64_t us) { atomic_store(&g_live_status, status); atomic_store(&g_live_gpu_us, us); }
++void dm_live_command(int command) {
++    unsigned before = dm_live_flags(), after; if (!(before & LIVE_ENABLED)) return;
++    if (command == LIVE_MARK) { LIVE_LOG("SAMPLE flags=%u target=%d generation=%u fg_status=%d fg_gpu=%.3f ms", before, dm_live_target(), dm_live_generation(), dm_live_status(), dm_live_gpu_us() / 1000.); return; }
++    do {
++        after = before;
++        switch (command) {
++            case LIVE_TOGGLE_FG: after ^= LIVE_FG; if (after & LIVE_FG) after |= LIVE_CAP30; break;
++            case LIVE_NATIVE60: after &= ~(LIVE_FG | LIVE_CAP30); break;
++            case LIVE_NATIVE30: after = (after & ~LIVE_FG) | LIVE_CAP30; break;
++            case LIVE_OUTPUT720: after |= LIVE_720; break;
++            case LIVE_OUTPUT1080: after &= ~LIVE_720; break;
++            case LIVE_TOGGLE_ADAPT: after ^= LIVE_ADAPT; break;
++            case LIVE_TOGGLE_ISOLATE: after ^= LIVE_ISOLATE; break;
++            default: return;
++        }
++    } while (!atomic_compare_exchange_weak(&g_live_flags, &before, after));
++    if (after != before) { unsigned n = atomic_fetch_add(&g_live_generation, 1) + 1; LIVE_LOG("CHANGE generation=%u command=%d framegen=%d native_target=%d output=%s adaptive=%d isolation=%d", n, command, !!(after & LIVE_FG), after & LIVE_CAP30 ? 30 : 60, after & LIVE_720 ? "720p" : "1080p", !!(after & LIVE_ADAPT), !!(after & LIVE_ISOLATE)); }
++}
+diff --git a/dm/host/live_controls.h b/dm/host/live_controls.h
+new file mode 100644
+index 0000000..ce2a760
+--- /dev/null
++++ b/dm/host/live_controls.h
+@@ -0,0 +1,25 @@
++// Live controls: one atomic configuration for the in-game menu / launcher.
++// Ported from the Traspaso-iPhone lab package (reference/framegen/LiveControls.h +
++// live_controls.inc), adapted for kid X9 / iOS:
++//  - plain C module, no AppKit, no setenv from the UI thread, no host dependency:
++//    the UI publishes commands, the render/present threads only read atomics.
++//  - names renamed LAB_* -> LIVE_*, dm_lab_live_* -> dm_live_*, env DM_LAB_LIVE ->
++//    DM_LIVE_CONTROLS, DM_LAB_NATIVE_FPS -> DM_LIVE_NATIVE_FPS (same semantics).
++//  - the lab's lab_capture_on() (DM_FG_METALFX) is dropped: X9's frame generation is
++//    DM_FRAMEGEN, read once at launch by fg_on() (nvn_mtl.m); this module does not
++//    pretend to switch it live. See port-ios/PORT-IOS-REPORT.md, Fase C.
++//  - what it DOES do today: atomic state + generation counter + performance-sample
++//    logging (LIVE_MARK), consumable by the HUD / log. Wiring a live framegen toggle
++//    needs host work first (reset g_fg_mode + snapshot ring, see the report).
++#pragma once
++#include <stdint.h>
++enum { LIVE_FG = 1, LIVE_CAP30 = 2, LIVE_720 = 4, LIVE_ADAPT = 8, LIVE_ISOLATE = 16, LIVE_ENABLED = 256 };
++enum { LIVE_TOGGLE_FG = 1, LIVE_NATIVE60, LIVE_NATIVE30, LIVE_OUTPUT720, LIVE_OUTPUT1080, LIVE_TOGGLE_ADAPT, LIVE_TOGGLE_ISOLATE, LIVE_MARK };
++enum { LIVE_FG_OFF, LIVE_FG_WARMING, LIVE_FG_ACTIVE, LIVE_FG_LATE, LIVE_FG_DEPTH, LIVE_FG_ERROR };
++unsigned dm_live_flags(void);
++unsigned dm_live_generation(void);
++int dm_live_target(void);
++void dm_live_command(int command);
++void dm_live_note(int status, uint64_t gpu_us);
++int dm_live_status(void);
++uint64_t dm_live_gpu_us(void);
+diff --git a/dm/host/tests/Makefile b/dm/host/tests/Makefile
+index 848925e..7074b62 100644
+--- a/dm/host/tests/Makefile
++++ b/dm/host/tests/Makefile
+@@ -12,7 +12,7 @@ QUIET = $(if $(findstring -fsanitize,$(SAN)),,2>/dev/null)
+ GINC = $(if $(strip $(GAME)),-I../gen/$(GAME) -I../../games/$(GAME),$(error GAME is not set: make GAME=<base game title ID>: $(shell python3 ../../games/game.py list | awk -F'\t' '{printf "%s (%s)  ", $$1, $$3}')))
+ $(B)/t_fs $(B)/t_fs_case $(B)/t_fs_commit_list $(B)/t_fs_commit_list_tsan: ../romfs_image.h
+ GAME_H = ../gen/$(GAME)/game_profile.h
+-run: $(B)/t_net_eventfd $(B)/t_language $(B)/t_motion $(B)/t_heap_size $(B)/t_touch $(B)/t_gesture $(B)/t_oe $(B)/t_fs $(B)/t_fs_commit_list $(B)/t_thread_leak $(B)/t_fs_case $(B)/t_audio $(B)/t_output_stream $(B)/t_audio_spsc $(B)/t_swkbd $(B)/t_altstack $(B)/t_condvar $(B)/t_condvar_old $(B)/t_pollwait $(B)/t_pctl $(B)/t_sf $(B)/t_time $(B)/t_shared_font $(B)/t_vorbis $(B)/t_vorbis_divides $(B)/t_hid $(B)/t_haptics $(B)/t_haptics_apple $(B)/t_cheats $(B)/t_pad_hid
++run: $(B)/t_net_eventfd $(B)/t_language $(B)/t_motion $(B)/t_heap_size $(B)/t_touch $(B)/t_gesture $(B)/t_oe $(B)/t_fs $(B)/t_fs_commit_list $(B)/t_thread_leak $(B)/t_fs_case $(B)/t_audio $(B)/t_output_stream $(B)/t_audio_spsc $(B)/t_swkbd $(B)/t_altstack $(B)/t_condvar $(B)/t_condvar_old $(B)/t_pollwait $(B)/t_pctl $(B)/t_sf $(B)/t_time $(B)/t_shared_font $(B)/t_vorbis $(B)/t_vorbis_divides $(B)/t_hid $(B)/t_haptics $(B)/t_haptics_apple $(B)/t_cheats $(B)/t_pad_hid $(B)/t_live_controls
+ 	$(B)/t_language
+ 	$(B)/t_heap_size
+ 	$(B)/t_touch
+@@ -63,6 +63,8 @@ run: $(B)/t_net_eventfd $(B)/t_language $(B)/t_motion $(B)/t_heap_size $(B)/t_to
+ 	$(B)/t_motion_pro_mac
+ 	TMPDIR="$(abspath $(B))" $(B)/t_hid
+ 	$(B)/t_pad_hid
++	$(B)/t_live_controls
++	$(B)/t_live_controls 1
+ 	$(B)/t_haptics
+ 	$(B)/t_haptics_apple
+ 	TMPDIR="$(abspath $(B))" $(B)/t_cheats $(QUIET)
+@@ -101,6 +103,9 @@ nro: $(B)/t_nro
+ # the cheat engine (hle_cheats.c, compiled into the test with stubs for the loader, the heap and the keys)
+ $(B)/t_cheats: t_cheats.c ../hle_cheats.c ../dm.h ../dm_input.h $(GAME_H) | $(B)
+ 	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -I.. $(GINC) -o $@ t_cheats.c
++
++$(B)/t_live_controls: t_live_controls.c ../live_controls.c ../live_controls.h | $(B)
++	$(CLANG) -O1 -Wall -Werror -I.. -o $@ t_live_controls.c ../live_controls.c
+ .PHONY: cheats
+ cheats: $(B)/t_cheats
+ 	TMPDIR="$(abspath $(B))" $(B)/t_cheats
+diff --git a/dm/host/tests/t_live_controls.c b/dm/host/tests/t_live_controls.c
+new file mode 100644
+index 0000000..30ee405
+--- /dev/null
++++ b/dm/host/tests/t_live_controls.c
+@@ -0,0 +1,31 @@
++// Live controls state machine, no host: the same 27 checks as the lab's
++// reference/tests/test_live_controls.c (24 + 3), with the iOS names/env vars.
++// No assertion is weakened: the 30/60 values, the toggles and the invalid
++// command 999 are the specified behaviour.
++#include <stdio.h>
++#include <stdlib.h>
++#include <stdint.h>
++#include <pthread.h>
++#include <stdatomic.h>
++#include "../live_controls.h"
++static int checks, failed;
++#define CHECK(c) do { checks++; if (!(c)) { failed++; fprintf(stderr, "FAIL line %d\n", __LINE__); } } while (0)
++int main(int argc, char **argv) {
++    (void)argv;
++    if (argc > 1) { unsetenv("DM_LIVE_CONTROLS"); CHECK(dm_live_flags() == 0); dm_live_command(LIVE_TOGGLE_FG); CHECK(dm_live_flags() == 0); CHECK(dm_live_target() == 0); }
++    else {
++        setenv("DM_LIVE_CONTROLS", "1", 1); setenv("DM_LIVE_NATIVE_FPS", "60", 1);
++        CHECK(dm_live_flags() & LIVE_ENABLED); CHECK(!(dm_live_flags() & LIVE_FG)); CHECK(dm_live_target() == 60);
++        unsigned gen = dm_live_generation(); dm_live_command(LIVE_TOGGLE_FG); CHECK(dm_live_flags() & LIVE_FG); CHECK(dm_live_target() == 30); CHECK(dm_live_generation() > gen);
++        dm_live_command(LIVE_TOGGLE_FG); CHECK(!(dm_live_flags() & LIVE_FG)); CHECK(dm_live_target() == 30);
++        dm_live_command(LIVE_TOGGLE_FG); dm_live_command(LIVE_NATIVE60); CHECK(dm_live_target() == 60); CHECK(!(dm_live_flags() & LIVE_FG));
++        dm_live_command(LIVE_NATIVE30); CHECK(dm_live_target() == 30); CHECK(!(dm_live_flags() & LIVE_FG));
++        dm_live_command(LIVE_OUTPUT1080); CHECK(!(dm_live_flags() & LIVE_720)); dm_live_command(LIVE_OUTPUT720); CHECK(dm_live_flags() & LIVE_720);
++        unsigned state = dm_live_flags(); dm_live_command(LIVE_TOGGLE_ADAPT); CHECK((dm_live_flags() ^ state) == LIVE_ADAPT);
++        state = dm_live_flags(); dm_live_command(LIVE_TOGGLE_ISOLATE); CHECK((dm_live_flags() ^ state) == LIVE_ISOLATE);
++        state = dm_live_flags(); gen = dm_live_generation(); dm_live_command(999); CHECK(dm_live_flags() == state); CHECK(dm_live_generation() == gen);
++        dm_live_note(LIVE_FG_LATE, 1234); CHECK(dm_live_status() == LIVE_FG_LATE); CHECK(dm_live_gpu_us() == 1234);
++        dm_live_command(LIVE_MARK); CHECK(dm_live_flags() == state);
++    }
++    printf("live controls: %d checks, %d failed\n", checks, failed); return failed ? 1 : 0;
++}
+diff --git a/dm/host/tests/t_svc_memory.c b/dm/host/tests/t_svc_memory.c
+index f8878aa..f47d8f4 100644
+--- a/dm/host/tests/t_svc_memory.c
++++ b/dm/host/tests/t_svc_memory.c
+@@ -469,6 +469,29 @@ static void file_rule(void) {
+     assert(!guest_file_wanted(NULL, pool9, 0));   // no limit known: the Mac
+     assert(!guest_file_wanted("0", pool9, 8 * G) && guest_file_wanted("1", pool3, 12 * G) && guest_file_wanted("1", pool3, 0));
+ }
++// With the guest in files, what the game gives back in the alias region is punched out by the sweep once it has stayed given back over a whole sweep interval: a page mapped again in between keeps
++// its blocks, the rest give theirs back and read 0 when mapped again (upstream main)
++static double file_blocks(void) { double b = 0; struct stat st; for (int i = 0; i < g_gf_n; i++) if (!fstat(g_gf_tab[i], &st)) b += st.st_blocks * 512.0; return b; }
++static void file_sweep(void) {
++    if (!g_gf_n) return;
++    size_t pg = memory_getpagesize(); uintptr_t a = alias + 64 * pg;
++    guest_file_sweep(); guest_file_sweep();                       // what the tests before gave back
++    assert(!pages(1, a, 8 * pg));
++    memset((void *)a, 0x77, 8 * pg); assert(!msync((void *)a, 8 * pg, MS_SYNC));
++    double b0 = file_blocks(); uint64_t p0 = g_gf_punched;
++    assert(b0 >= 8.0 * pg);
++    assert(!pages(0, a, 8 * pg));
++    guest_file_sweep();                                           // given back since the last sweep: only aged
++    assert(g_gf_punched == p0 && file_blocks() == b0);
++    assert(!pages(1, a, pg));                                     // in use again: not punched
++    guest_file_sweep();
++    assert(g_gf_punched == p0 + 7 * pg && file_blocks() <= b0 - 7.0 * pg);
++    for (size_t i = 0; i < pg; ++i) assert(((uint8_t *)a)[i] == 0);   // zeroed when mapped again (alias_initialize), as before
++    assert(!pages(1, a + pg, 7 * pg));
++    for (size_t i = 0; i < 7 * pg; ++i) assert(((uint8_t *)a)[pg + i] == 0);
++    assert(!pages(0, a, 8 * pg));
++    guest_file_sweep(); guest_file_sweep();
++}
+ static void heap_regrow(void) {
+     assert(!resize(4 * 1024 * 1024));
+     memset((void *)(heap + 3 * 1024 * 1024), 0x5a, P);
+@@ -532,7 +555,7 @@ int main(int argc, char **argv) {
+     for (unsigned i = 0; i < 8; ++i) assert(!pthread_create(&threads[i], NULL, init_worker, &addresses[i]));
+     for (unsigned i = 0; i < 8; ++i) { assert(!pthread_join(threads[i], NULL)); assert(addresses[i] == addresses[0]); }
+     alias = addresses[0]; stack = info(I_StackAddr); heap = info(I_HeapAddr);
+-    lazy_commit(); alias_lifecycle(); ownership(); module_sources(); module_back_patch(); failures(); release_fallback(); file_rule(); heap_regrow(); concurrency(); fragmented_queries();
++    lazy_commit(); alias_lifecycle(); ownership(); module_sources(); module_back_patch(); failures(); release_fallback(); file_rule(); file_sweep(); heap_regrow(); concurrency(); fragmented_queries();
+     guest_helper();
+     if (!DM_GAME_MEM_MAP_LIMIT) metadata_limit();
+ #ifdef TEST_REAL_DIRTY
+@@ -551,7 +574,7 @@ int main(int argc, char **argv) {
+     g_mod[0].back_len = 0;
+     assert(image_bytes() == 0x10000000);
+     g_nmod = 0;
+-    free(g_alias_bits); free(g_alias_exposed); assert(!munmap(g_as, RESERVE));
++    free(g_alias_bits); free(g_alias_exposed); free(g_alias_rel); free(g_alias_aged); assert(!munmap(g_as, RESERVE));
+     printf("memory SVCs passed (map limit=%d, host page=%d, guest files %d)\n", DM_GAME_MEM_MAP_LIMIT, memory_getpagesize(), g_gf_n);
+     return 0;
+ }

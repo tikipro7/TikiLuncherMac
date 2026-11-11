@@ -1,0 +1,33 @@
+# MAX-16GB+ — Mac M1 Pro 16 GB / iPhone 18 Pro. Ocarina of Time, kid X9 + MAX.
+# Copiar a Documents/env.txt del juego (o al env del launcher).
+# Mismo eje que MAX-8GB (pool_peek + MetalFX + Potato). Solo cambian render y FG:
+# el coste de FG sigue el tamaño MOSTRADO (1920x1080, ~12-13 ms lab a 1080p), no el
+# render, así que subir el render no encarece FG proporcionalmente; lo que crece es
+# solo la escena. 0.50 es el TECHO A PROBAR, no un valor validado: si el p95 pasa
+# de 33.3 ms, bajar a 0.40 (fallback) o FG=0. La lista Potato se mantiene intacta.
+DM_PRESET=potato
+DM_FPS_TARGET=30
+DM_RENDER_SCALE=0.50
+DM_UPSCALER=metalfx
+DM_PRESENT_UPSCALE=metalfx
+DM_TEX_RELEASE=1
+DM_FRAMEGEN=1
+DM_PSO_MTL4=1
+DM_PSO_PREBUILD=1
+DM_WIDE_VIEW=0
+DM_RT=1
+DM_FRAME_WG=1
+DM_NVN_ENC_THREAD=1
+# Guest en archivos solo si el pool no cabe (auto en iOS; en Mac 16 GB normalmente no):
+# DM_GUEST_FILE=1
+# file_wire (parche 07, Mac): solo actúa con guest en archivos; aquí es no-op salvo DM_GUEST_FILE=1:
+DM_NVN_FILE_WIRE=1
+# Aislamiento Hi-Z (parche 08, PR #1842; off por defecto en código; =0 lo apaga):
+DM_NVN_ISOLATE_TASK=1
+# Explícitos aunque ya son default en MAX (06 on, 09 on):
+DM_GUEST_FILE_PUNCH=1
+DM_NVN_IMAGE_FAMILY=1
+# Diagnóstico (solo se imprime con DM_CTL restop en el juego):
+# DM_NVN_POOL_CENSUS=1
+# LiveControls (parche 05) queda off: el toggle live de FG no está cableado:
+# DM_LIVE_CONTROLS=0

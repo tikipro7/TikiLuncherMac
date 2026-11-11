@@ -1,0 +1,83 @@
+diff --git a/dm/games/0400486024DEC000/README.md b/dm/games/0400486024DEC000/README.md
+index 7b055fa..6617b89 100644
+--- a/dm/games/0400486024DEC000/README.md
++++ b/dm/games/0400486024DEC000/README.md
+@@ -8,6 +8,8 @@ The Switch 2 base dump reaches its title screen on the Mac. VideoToolbox decodes
+ 
+ SDK 22.2.8, NVN API 231.40, with Nintendo's sead, agl and gsys. The three loaded modules are `main`, `subsdk0` (NintendoSDK_movie), and `sdk`. The NPDM declares 48 MiB of system resources. Startup requests a 6.20 GiB heap, which fits in the profile's 12 GiB reservation with the stack and alias regions. The registered build is the supplied base dump (`v0`).
+ 
++The low-memory defaults are on by default for this game, so the player does not have to turn them on in the launcher: `fps_target 30` (was 60), `render_scale_default 0.25` (was 0.667) and `potato_default on` (a new profile key; `game.py` emits `DM_GAME_POTATO_DEFAULT`, and `settings.tsv` uses it as the `DM_PRESET` default). A saved launcher choice or an env file that sets `DM_PRESET` still wins, and turning Potato off in the launcher is still one toggle. Not measured on an iPhone 15 Pro Max or an 8 GB Mac yet.
++
+ ## Mac dry run
+ 
+ Use the rewritten `patched_v0` and the original extracted `base/romfs`. Build the host with `make -C dm/host GAME=0400486024DEC000` and use the [Mac shader build](../../../docs/development.md#build-by-hand-mac). From the repository, set `DUMP` to the folder containing `base` and `WORK` to the build and run workspace beside it.
+diff --git a/dm/games/0400486024DEC000/game.tsv b/dm/games/0400486024DEC000/game.tsv
+index 9b8359c..ec2dd03 100644
+--- a/dm/games/0400486024DEC000/game.tsv
++++ b/dm/games/0400486024DEC000/game.tsv
+@@ -77,8 +77,9 @@ pso_mtl4	on
+ # build used --gpu none, as the A20's architecture name was not known
+ pso_gpu	applegpu_g19p
+ # Frame rate: the host steps the game in whole vsyncs (patches.py FRAME_STEP: the frame-rate controller's interval and fps follow the host's step), so the launcher's Frame rate
+-# setting offers 30 and 60. At 30 every frame is held two vsyncs (33.3 ms) and the game's own 30 fps mode steps its time by two, so it runs at full speed
+-fps_target	60
++# setting offers 30 and 60. At 30 every frame is held two vsyncs (33.3 ms) and the game's own 30 fps mode steps its time by two, so it runs at full speed.
++# Default 30 (was 60): on an 8 GB iPhone / Mac the game cannot hold 60, and 30 is the rate the low-memory defaults below are tuned for. The player can still pick 60.
++fps_target	30
+ # At 30 fps an iPhone lowers the GPU clock until the work fills most of the frame (iPhone 18 Pro at render scale 0.25: GPU p50 12 ms at 60 fps, 29-30 ms at 30, p95 33-38 ms;
+ # log 60: 195 of 300 frames over 33.3 ms, p99 64 ms, 109 payback steps of 3 in 40 s). Three things make the 30 steady:
+ # present snapshots, so the game's swapchain texture is free at once and its CPU work overlaps the GPU's instead of starting on the link's tick (log 60 had them off: frame
+@@ -96,6 +97,10 @@ fps_payback	off
+ # prewarm keeps no pipeline (warm-only, in the background); pools over 512 MB stay in the guest files, wired by the chunks the GPU reaches; render and depth targets of 4 MB and more
+ # made only when a draw binds them (lazy textures). The Render scale stays the player's
+ potato	DM_NVN_RES_EVICT_MB=4400,DM_NVN_TEX_RECYCLE_MB=64,DM_NVN_ALIAS_SWEEP=600,DM_PSO_WARM_ONLY=1,DM_PSO_PREPARE=0,DM_POOL_ANON_MAX_MB=512,DM_NVN_GMEM_NOBIG=1,DM_TEX_LAZY=2,DM_TEX_LAZY_MIN_KB=4096
++# Potato mode is on by default for this game (potato_default on; game.py DM_GAME_POTATO_DEFAULT, settings.tsv DM_PRESET): the player does not have to
++# turn it on in the launcher, and the rows it sets are locked at its values while it is on. Turning it off in the launcher is still one toggle, and a
++# saved choice still wins over this default. An env file that sets DM_PRESET keeps its own value.
++potato_default	on
+ pad_layout	native
+ # The touch controls' Forest colours: blue A, green B, yellow X / Y, red +, deep green shoulders, bronze D-pad, gold rims, all translucent (DmGamepad.m theme_init)
+ pad_theme	forest
+@@ -115,6 +120,7 @@ dispatch_overlap	on
+ res_presets	off
+ render_base	2560x1440 1920x1080
+ render_scale	0.25:1.0:0.05
+-render_scale_default	0.667
++# Default 0.25, marked Potato (was 0.667, the old Normal's 1280x720): the low-memory default for 8 GB devices. The player can still raise the slider.
++render_scale_default	0.25
+ render_scale_marks	0.25=Potato
+ frame_wg	off
+diff --git a/dm/games/game.py b/dm/games/game.py
+index 3f2c37e..adac1bf 100644
+--- a/dm/games/game.py
++++ b/dm/games/game.py
+@@ -163,6 +163,8 @@ def header_one(g):
+     if ft not in ('0', '30', '60'): sys.exit(f'{g.id}: fps_target must be 0, 30 or 60: {ft}')
+     pot = g.get('potato', '')   # the launcher's Potato mode (DM_PRESET=potato; loader.c dm_preset_apply): <VAR>=<value>,... set when the game starts; none = no Potato row (kid-with-sword-remake)
+     if pot and not all(re.fullmatch(r'DM_[A-Z0-9_]+=[^,\s"]+', kv) for kv in pot.split(',')): sys.exit(f'{g.id}: potato is <VAR>=<value>,...: {pot}')
++    pod = g.get('potato_default', 'off')   # whether Potato mode is on by default for this game (settings.tsv DM_PRESET, DM_GAME_POTATO_DEFAULT): on / off; a saved choice or an env file still wins
++    if pod not in ('on', 'off'): sys.exit(f'{g.id}: potato_default must be on or off: {pod}')
+     fm = g.get('fps_max', '60')   # the highest rate fps_target and the player's Frame rate may take: 120 only for a game checked at that speed (hle_nvn.c fps_high)
+     if fm not in ('60', '120'): sys.exit(f'{g.id}: fps_max must be 60 or 120: {fm}')
+     fh = g.get('fps_hold', 'on')   # whether the frame step may hold a frame longer than the cap's vsyncs when frames come late (hle_nvn.c fstep_tick): on / off
+@@ -291,6 +293,7 @@ def header_one(g):
+          f'#define DM_GAME_FPS_TARGET {int(ft)}',
+          f'#define DM_GAME_POTATO "{pot}"',   # the Potato mode's settings (loader.c dm_preset_apply)
+          f'#define DM_GAME_POTATO_N {len(pot.split(",")) if pot else 0}',   # how many: the launcher's Potato mode row shows when there are any
++         f'#define DM_GAME_POTATO_DEFAULT {int(pod == "on")}',   # Potato mode on by default for this game (settings.tsv DM_PRESET); 0 when the key is off or absent
+          f'#define DM_GAME_FPS_MAX {int(fm)}',
+          f'#define DM_GAME_FPS_HOLD {int(fh == "on")}',
+          f'#define DM_GAME_FPS_PAYBACK {int(fpb == "on")}',
+diff --git a/dm/games/settings.tsv b/dm/games/settings.tsv
+index 3dfe9a2..42242a0 100644
+--- a/dm/games/settings.tsv
++++ b/dm/games/settings.tsv
+@@ -18,7 +18,7 @@ DM_FPS_TARGET	choice	30=30 fps,60=60 fps,120=120 fps?DM_GAME_FPS_MAX==120&platfo
+ DM_FRAMEGEN	toggle	-	0	gfxapi:nvn	Game	Frame generation	Shows 60 frames a second while the game draws 30: MetalFX makes a frame between each two. Less work and heat than 60 fps, with more input delay than real 60; fast motion can smear.	needs=DM_FPS_TARGET=30
+ DM_DYNAMIC_RESOLUTION	toggle	-	0	fixups:DYNAMIC_RESOLUTION	Game	Dynamic resolution	Adjusts resolution between 70% and 100% under load. Turn off to keep full resolution for the selected console mode.
+ DM_RENDER_SCALE	range	0.5:1.0:0.05	1.0	fixups:RENDER_SCALE	Game	Render scale		level=basic
+-DM_PRESET	toggle	potato/standard	0	DM_GAME_POTATO_N!=0	Game	Potato mode	For iPhones with less memory (8 GB, such as the iPhone 15 Pro): the A builds' memory savers. Off, none of them runs.	level=basic
++DM_PRESET	toggle	potato/standard	DM_GAME_POTATO_DEFAULT	DM_GAME_POTATO_N!=0	Game	Potato mode	For iPhones with less memory (8 GB, such as the iPhone 15 Pro): the A builds' memory savers. Off, none of them runs.	level=basic
+ DM_OPMODE	choice	1=Docked,0=Handheld	DM_GAME_OPMODE	always	Game	Console mode		level=basic
+ DM_RES_PRESET	choice	0=Normal,1=Potato	0	DM_GAME_RES_PRESETS!=0	Game	Resolution	Normal renders 1280×720 handheld (1951×1098 docked), steady at 30 fps. Potato is the game's lighter mode: 960×540 shown at 720p, for 60 fps on a warm phone.	level=basic
+ DM_PRESENT_UPSCALE	choice	off=Standard,metalfx=MetalFX	off	always	Game	Upscaling	Uses more GPU time and can increase heat.

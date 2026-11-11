@@ -1,8 +1,21 @@
 # TikiLuncherMac
 
-ForkTikiLauncher v45 para Mac + fork kid X9 de Ocarina of Time, optimizado para iPhone 15 Pro Max.
+ForkTikiLauncher v50 para Mac + fork kid X9 de Ocarina of Time: el modo bajo de RAM ya viene por defecto en el juego (fps 30, render 0.25, Potato on), sin ir a ajustes.
 
 Launcher SwiftUI para Mac que construye juegos de Switch / Switch 2 a IPA para iPhone (AltStore Classic) o a .app para Mac, con nxnative / NX2Apple, con selector de fork, presets y descarga de herramientas. Todo desde el launcher, sin abrir otra app.
+
+## Que trae la v48
+
+Revisión de código, sin cambiar lo que hace el launcher para el usuario:
+
+- **Title IDs corregidos:** Luigi's Mansion 3 (`0100DCA0064A6000`) y Animal Crossing (`01006F8002326000`) tenían 15 dígitos y nunca coincidían al detectar el juego por el nombre del archivo. `detectGame` ahora exige una racha de exactamente 16 hex.
+- **Auto-actualizador seguro:** baja a archivos temporales y valida antes de reemplazar `App.swift`; compila con `-derivedDataPath build/DerivedData` (ya no depende del hash de DerivedData de la Mac de Luis, así funciona en cualquier Mac); si algo falla, restaura el código anterior y reabre la app vieja. Ya no usa `/tmp/tiki-update-marker`.
+- **`build()`:** valida Mac + Separate antes de dependencias y parches; ya no deja `tikiFixApplied` pegado tras un rechazo; **evita que la Mac se duerma** durante el build; avisa en el log si el espacio no alcanza; "borrar el juego" solo cuenta un `.ipa` creado en ESE build.
+- **Optimización universal:** ya no pisa un `game.tsv` real (`dm/games/<TitleID>/game.tsv`); el formato que escribía no existe en el fork X9.
+- **Descargar kid** usa la misma lógica x9 que "Clonar / actualizar fork" (un `git pull` normal fallaba en HEAD suelto o con parches aplicados). Los parches se bajan con `curl -f`.
+- **Log y UI:** el log se acota (antes crecía sin límite), `runCommand` ya no pierde salida con caracteres UTF-8 partidos, la lista de juegos ya no se sale de la ventana, el Picker de fork usa `.menu` de verdad, y el texto del encabezado ya no promete actualizar al abrir.
+
+Sin compilar en este entorno (no hay Swift en Linux): la Mac debe validarlo con `xcodebuild`.
 
 ## Que trae la v24
 
@@ -72,7 +85,7 @@ Launcher SwiftUI para Mac que construye juegos de Switch / Switch 2 a IPA para i
 
 ## Que trae la v8
 
-- Motor kid-with-sword-remake X9 para Ocarina of Time, con toggle **"Mejoras tiki (Ocarina: nota + memoria)"** prendido por defecto. X9 trae Frame Gen (30 fps mostrado a 60), pools en archivos, fix del crash tras guardar, y la primera nota ya viene en X9. v45 añade el parche tiki pool_peek (nxnative PR #2085, candidato sin compilar) y el preset iPhone 15 Pro Max.
+- Motor kid-with-sword-remake X9 para Ocarina of Time, con toggle **"Mejoras tiki v47 (Ocarina: iPhone / MAX + defaults)"** prendido por defecto. X9 trae Frame Gen (30 fps mostrado a 60), pools en archivos, fix del crash tras guardar, y la primera nota ya viene en X9. v45 añadió el parche tiki pool_peek (nxnative PR #2085, candidato sin compilar) y el preset iPhone 15 Pro Max. v46 aplica el parche único por plataforma antes del build — iPhone: tiki-x9-iphone.patch, Mac: tiki-x9-max.patch — y añade presets MAX para Mac 8 GB y 16 GB, con el preset iPhone actualizado a env-iphone-15promax.txt. Sin probar en 15 Pro Max ni en M1. v47: el modo bajo de RAM ya viene por defecto en el juego (fps 30, render 0.25, Potato on) con tiki-x9-oot-defaults.patch, y el launcher ya trae el preset iPhone 30 fps Potato puesto por defecto para Ocarina.
 - Antes del build aplica el parche de la primera nota de ocarina e intenta el cherry-pick de memoria upstream `8d5d4f1`. Si el cherry-pick da conflicto, lo aborta, lo dice en el log y sigue con el build.
 - Sin preset por defecto: no escribe env.txt si no eliges uno. El preset lo aplicas tu afuera.
 - Soporte Switch 2 (.nup) y Switch 1 (.nsp/.nsz, con prod.keys), iPhone / Mac, Separate / Bundle, updates y DLC, borrado del juego tras un build bueno, y chequeo de version del fork.
@@ -82,9 +95,10 @@ Launcher SwiftUI para Mac que construye juegos de Switch / Switch 2 a IPA para i
 ```bash
 cd ~/ForkTikiLauncher
 xcodegen generate
-xcodebuild -project ForkTikiLauncher.xcodeproj -scheme ForkTikiLauncher -configuration Release build
-cp -R /Users/tiki/Library/Developer/Xcode/DerivedData/ForkTikiLauncher-ghtzqyhxhnoemhcmazbbmdwwdane/Build/Products/Release/ForkTikiLauncher.app ~/ForkTikiLauncher/build/Release/
-open ~/ForkTikiLauncher/build/Release/ForkTikiLauncher.app
+xcodebuild -project ForkTikiLauncher.xcodeproj -scheme ForkTikiLauncher -configuration Release -derivedDataPath build/DerivedData build
+mkdir -p build/Release
+cp -R build/DerivedData/Build/Products/Release/ForkTikiLauncher.app build/Release/
+open build/Release/ForkTikiLauncher.app
 ```
 
 Requisitos: Mac Apple Silicon, macOS 26.6+, Xcode 27.2, Homebrew, Python 3.12, xcodegen.

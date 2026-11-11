@@ -1,22 +1,7 @@
-# PASOS — ForkTikiLauncher v45 — optimizado para iPhone 15 Pro Max
+# PASOS — ForkTikiLauncher v50
 
-v24: destino del build en disco externo. En Paso 4 · Compilar, sección "Destino del build", elige Disco interno o Disco externo. Ver "Destino del build: disco externo" abajo.
-
-# PASOS — ForkTikiLauncher v12
-
-v12: buscar forks para cualquier juego, y optimización universal Switch 2 para cualquier Title ID.
-
-# PASOS — ForkTikiLauncher v11
-
-v11: interfaz nueva con tarjetas por paso, números 1-2-3-4, botón verde grande para Compilar, y textos cortos.
-
-# PASOS — ForkTikiLauncher v10
-
-v10: auto-actualización al abrir la app, desde tikipro7/TikiLuncherMac. Si hay versión nueva, baja el App.swift, recompila sola y deja la app nueva en build/Release.
-
-# PASOS — ForkTikiLauncher v9
-
-v9: botón arriba para revisar si hay versión nueva del launcher en tikipro7/TikiLuncherMac, y el build aplica primero el parche de memoria tiki-v22-mem.patch antes del cherry-pick.
+v48: revisión de código (ver README). v47: modo bajo de RAM por defecto en el juego (fps 30, render 0.25, Potato on).
+v24: destino del build en disco externo (ver "Destino del build: disco externo" abajo).
 
 # ForkTikiLauncher — pasos desde Terminal
 
@@ -49,12 +34,10 @@ u otro juego manual con su Title ID), cualquier fork de GitHub (además de
 al cambiar de juego los valores vuelven al preset óptimo para M1 + 15 Pro
 Max: 30 fps, render 0.5, MetalFX, prebuild.
 
-> Compiló en la Mac de Luis el 8 nov 2026. El `.app` queda en DerivedData,
-> en `/Users/tiki/Library/Developer/Xcode/DerivedData/ForkTikiLauncher-ghtzqyhxhnoemhcmazbbmdwwdane/Build/Products/Release/ForkTikiLauncher.app`,
-> no en `build/Release/`. Después de cada `xcodebuild`, cópialo a
-> `~/ForkTikiLauncher/build/Release/` (paso 2): si abres el de
-> `build/Release/` sin copiar, sigues abriendo la versión vieja, sin los
-> botones nuevos ni la barra. Si da error al recompilar, pega el error tal cual.
+> Compiló en la Mac de Luis el 8 nov 2026. Después de cada `xcodebuild`,
+> copia el `.app` a `~/ForkTikiLauncher/build/Release/` (paso 2): si abres el
+> de `build/Release/` sin copiar, sigues abriendo la versión vieja. Si da
+> error al recompilar, pega el error tal cual.
 
 ## Requisitos (los del fork, revisados el 8 nov 2026)
 
@@ -66,7 +49,7 @@ Max: 30 fps, render 0.5, MetalFX, prebuild.
 - ~80 GB libres para la carpeta del build + 3 GB (Separate) o 27 GB (Bundle)
   para el IPA. Con el `.nup` de 24 GB, el pico es ~102 GB en Separate
   y ~127 GB en Bundle. Revisa antes: `df -h ~`
-- El fork sigue en **V16** (revisado el 8 nov 2026 en GitHub)
+- El fork kid está en **X9** (10 nov 2026); el launcher usa la rama `x9`
 - Para instalar el IPA en el iPhone: AltStore Classic con tu Apple ID
   (mantiene el permiso de memoria aumentada; Sideloadly lo quita)
 
@@ -91,15 +74,16 @@ mkdir -p ~/ForkTikiLauncher/Sources/ForkTikiLauncher
 cd ~/ForkTikiLauncher
 # (aquí van project.yml, PASOS.md y App.swift, ya copiados)
 xcodegen generate
-xcodebuild -project ForkTikiLauncher.xcodeproj -scheme ForkTikiLauncher -configuration Release build
+xcodebuild -project ForkTikiLauncher.xcodeproj -scheme ForkTikiLauncher -configuration Release -derivedDataPath build/DerivedData build
 ```
 
-El `.app` sale en DerivedData. Para abrirlo y copiarlo a tu proyecto:
+Con `-derivedDataPath build/DerivedData` el `.app` sale siempre en
+`build/DerivedData/Build/Products/Release/` (misma ruta en cualquier Mac).
+Para copiarlo y abrirlo:
 
 ```bash
-open "/Users/tiki/Library/Developer/Xcode/DerivedData/ForkTikiLauncher-ghtzqyhxhnoemhcmazbbmdwwdane/Build/Products/Release/"
 mkdir -p ~/ForkTikiLauncher/build/Release
-cp -R "/Users/tiki/Library/Developer/Xcode/DerivedData/ForkTikiLauncher-ghtzqyhxhnoemhcmazbbmdwwdane/Build/Products/Release/ForkTikiLauncher.app" ~/ForkTikiLauncher/build/Release/
+cp -R ~/ForkTikiLauncher/build/DerivedData/Build/Products/Release/ForkTikiLauncher.app ~/ForkTikiLauncher/build/Release/
 open ~/ForkTikiLauncher/build/Release/ForkTikiLauncher.app
 ```
 

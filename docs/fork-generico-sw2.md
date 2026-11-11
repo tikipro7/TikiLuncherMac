@@ -40,9 +40,14 @@ frame_wg off
 # Controles — layout Native genérico
 pad_layout native
 
-## 2. env.txt genérico — para iPhone 15 Pro Max, 30 fps estable
+## 2. env.txt genérico — para iPhone 15 Pro Max, 30 fps estable (v50)
 # Pon esto en Documents/env.txt del juego en el iPhone
-# Cada quien ajusta DM_RENDER_SCALE y DM_FPS_TARGET a su juego
+# (también en patches/env-generico-estable.txt y en el preset
+# "Genérico · 30 fps ESTABLE (Switch 2)" del launcher).
+# Cada quien ajusta DM_RENDER_SCALE y DM_FPS_TARGET a su juego.
+# Ocarina NO usa este env: tiene el suyo completo con todo
+# (patches/env-iphone-15promax-estable.txt, render 0.25, Potato,
+# image-family, task-isolate), que jala mejor en Ocarina.
 DM_FPS_TARGET=30
 DM_OPMODE=0
 DM_RENDER_SCALE=0.5
@@ -52,10 +57,13 @@ DM_PSO_PREBUILD=1
 DM_PSO_MTL4=1
 DM_PRESENT_SNAP=1
 DM_NVN_ENC_THREAD=1
-DM_FPS_HOLD=on
+DM_FPS_HOLD=off
 DM_FRAME_WG=0
 DM_QOS_MAP=1
 DM_QOS_EDGES=45,59
+DM_TEX_LAZY=1
+DM_TEX_LAZY_MIN_KB=4096
+DM_TEX_RELEASE=1
 DM_SHOW_FPS=0
 DM_METAL_HUD=0
 DM_TOUCH_HAPTICS=0

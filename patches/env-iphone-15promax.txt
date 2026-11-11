@@ -1,0 +1,49 @@
+# iPhone 15 Pro Max — Ocarina of Time, kid X9 + variante iPhone.
+# Copiar a Documents/env.txt del juego (o al env del launcher).
+# Límite: ~6.1 GB con Increased Memory Limit (AltStore Classic). Sin él, ~3.4 GB.
+# Eje (Matías): pool_peek (parche 01, consultas puras) + MetalFX + render bajo / Potato.
+# Nativo 30 fps primero; FG es opción, no default (ver abajo).
+# DM_PRESET=potato sobrescribe sus 9 vars: no duplicarlas aquí (loader.c dm_preset_apply).
+# Potato (game.tsv): evict 4400 MB, recycle 64 MB, alias sweep 600, PSO warm-only,
+# prepare 0, anon pools 512 MB, GMEM_NOBIG, TEX_LAZY 2 (min 4096 KB).
+DM_PRESET=potato
+DM_FPS_TARGET=30
+DM_RENDER_SCALE=0.25
+DM_UPSCALER=metalfx
+DM_PRESENT_UPSCALE=metalfx
+DM_TEX_RELEASE=1
+DM_PSO_MTL4=1
+DM_PSO_PREBUILD=1
+DM_WIDE_VIEW=0
+DM_RT=1
+DM_FRAME_WG=1
+DM_NVN_ENC_THREAD=1
+# Guest en archivos: en iOS se enciende solo cuando el pool del juego (9 GB)
+# no cabe en el hueco hasta el límite; aquí va explícito para documentarlo.
+# OJO: guest_file_thread para el juego (exit 87) si el disco baja de
+# DM_GUEST_FILE_MIN_FREE (default 5 GB): deja 15 GB libres en el iPhone.
+DM_GUEST_FILE=1
+# Parche 06 (on por defecto en el código; explícito aquí): lo que el juego
+# devuelve se perfora de los archivos del guest en vez de ocupar bloques en
+# disco. No baja phys_footprint directo: baja disco ocupado y páginas sucias.
+DM_GUEST_FILE_PUNCH=1
+# Parche 09 (on por defecto en el código; explícito aquí): familias de imagen
+# V23. Si aparecen artefactos de niebla, poner =0 y avisar (validar en Kokiri).
+DM_NVN_IMAGE_FAMILY=1
+# Parche 08 (off por defecto en el código; opt-in): aislamiento de la task
+# Hi-Z. En M1 16 GB quitó el cuelgue del tiler en 4/4 caminatas; en M5 Pro no
+# lo evitó y en M2 Pro costó +4.5 ms/frame. En A17 Pro sin medir: si el
+# stutter empeora, poner =0.
+DM_NVN_ISOLATE_TASK=1
+# Frame Generation de X9 (DM_FRAMEGEN, MetalFX, solo en el display link):
+# OFF por defecto aquí (nativo 30 primero, prioridad del prompt). Para
+# probarlo, poner =1: el juego sigue a 30 y la pantalla muestra 60, con
+# ~4 ms de GPU por frame interpolado a 1080p (medido en M5; en A17 Pro sin
+# medir) y +16.7 ms de latencia. Solo funciona si la GPU tiene interpolador
+# Metal 4 (supportsMetal4FX); si no, el log avisa y sigue a 30. No es el FG
+# del lab ni Netal: esos no existen en iOS (ver ../IPHONE-NETAL.md).
+DM_FRAMEGEN=0
+# 07 file_wire NO va aquí: es solo Mac (#if TARGET_OS_MAC, mach_vm.h no está
+# en el SDK iOS). No poner DM_NVN_FILE_WIRE: en iOS sería un no-op silencioso.
+# LiveControls (parche 05) queda off: el toggle live de FG no está cableado:
+# DM_LIVE_CONTROLS=0
