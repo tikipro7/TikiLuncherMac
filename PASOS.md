@@ -1,4 +1,4 @@
-# PASOS — ForkTikiLauncher v44
+# PASOS — ForkTikiLauncher v45 — optimizado para iPhone 15 Pro Max
 
 v24: destino del build en disco externo. En Paso 4 · Compilar, sección "Destino del build", elige Disco interno o Disco externo. Ver "Destino del build: disco externo" abajo.
 

@@ -1,6 +1,6 @@
 # TikiLuncherMac
 
-ForkTikiLauncher v44 para Mac + fork kid X9 de Ocarina of Time.
+ForkTikiLauncher v45 para Mac + fork kid X9 de Ocarina of Time, optimizado para iPhone 15 Pro Max.
 
 Launcher SwiftUI para Mac que construye juegos de Switch / Switch 2 a IPA para iPhone (AltStore Classic) o a .app para Mac, con nxnative / NX2Apple, con selector de fork, presets y descarga de herramientas. Todo desde el launcher, sin abrir otra app.
 
@@ -72,7 +72,7 @@ Launcher SwiftUI para Mac que construye juegos de Switch / Switch 2 a IPA para i
 
 ## Que trae la v8
 
-- Motor kid-with-sword-remake X9 para Ocarina of Time, con toggle **"Mejoras tiki (Ocarina: nota + memoria)"** prendido por defecto. X9 trae Frame Gen (30 fps mostrado a 60), pools en archivos, fix del crash tras guardar, y la primera nota ya viene en X9.
+- Motor kid-with-sword-remake X9 para Ocarina of Time, con toggle **"Mejoras tiki (Ocarina: nota + memoria)"** prendido por defecto. X9 trae Frame Gen (30 fps mostrado a 60), pools en archivos, fix del crash tras guardar, y la primera nota ya viene en X9. v45 añade el parche tiki pool_peek (nxnative PR #2085, candidato sin compilar) y el preset iPhone 15 Pro Max.
 - Antes del build aplica el parche de la primera nota de ocarina e intenta el cherry-pick de memoria upstream `8d5d4f1`. Si el cherry-pick da conflicto, lo aborta, lo dice en el log y sigue con el build.
 - Sin preset por defecto: no escribe env.txt si no eliges uno. El preset lo aplicas tu afuera.
 - Soporte Switch 2 (.nup) y Switch 1 (.nsp/.nsz, con prod.keys), iPhone / Mac, Separate / Bundle, updates y DLC, borrado del juego tras un build bueno, y chequeo de version del fork.

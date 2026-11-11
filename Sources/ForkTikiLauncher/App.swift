@@ -2,8 +2,9 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v44 (10 nov 2026)
+// ForkTikiLauncher — v45 (10 nov 2026)
 // v44: fork kid actualizado a X9 (10 nov 2026): Frame Gen 30->60, pools en archivos, fix crash tras guardar, primera nota ya en X9.
+// v45: optimizado para iPhone 15 Pro Max: preset iPhone X9 + parche tiki pool_peek (PR #2085) aplicado antes del build.
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -241,8 +242,8 @@ func recommendedFork(for titleId: String) -> (forkId: String, text: String) {
 func optimalPreset(for game: Game) -> Preset { presetNone }
 let preset30 = Preset(
     id: "m1-30fps",
-    name: "M1 + 15 Pro Max · 30 fps Potato (X9)",
-    detail: "30 fps Potato X9, render 0.25, MetalFX, Potato mode ON para 15 Pro. Frame Gen en el launcher del juego (30 fps mostrado a 60). Primer arranque tarda más por los shaders nuevos.",
+    name: "15 Pro Max · 30 fps Potato iPhone (X9)",
+    detail: "OPTIMIZADO PARA iPHONE 15 Pro Max: 30 fps Potato X9, render 0.25, MetalFX, Potato ON, Wide view OFF, Real-time presenting + Deadline boost ON en el launcher del juego, Frame Gen (30 fps mostrado a 60). Mantén 15 GB libres y No Molestar prendido. Primer arranque tarda más por los shaders nuevos.",
     env: """
     DM_FPS_TARGET=30
     DM_RENDER_SCALE=0.25
@@ -324,11 +325,11 @@ struct ContentView: View {
     @AppStorage("externalBuildsPath") private var externalBuildsPath: String = ""
     @State private var tikiFixApplied: Bool = false
     @State private var tikiFixStatus: String = ""
-    @State private var forkVersion: String = "X9 (10 nov 2026)"
+    @State private var forkVersion: String = "X9 + pool_peek tiki (10 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v44"
-    private let appVersionNumber = 44
+    private let appVersion = "v45"
+    private let appVersionNumber = 45
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -1615,6 +1616,17 @@ struct ContentView: View {
             git cherry-pick 8d5d4f1b04610fef5a96521c72a4263d68794959 && echo "Memoria: cherry-pick 8d5d4f1 aplicado." || { git cherry-pick --abort 2>/dev/null || true; echo "Memoria: cherry-pick 8d5d4f1 con conflicto, se abortó. Prueba en V23 o aplica a mano."; }
           fi
         fi
+        if grep -q pool_peek dm/gfx/nvn/nvn_mtl.m; then
+          echo "RAM: pool_peek tiki ya está."
+        else
+          curl -sL https://raw.githubusercontent.com/tikipro7/TikiLuncherMac/main/patches/tiki-x9-pool-peek.patch -o /tmp/tiki-x9-pool-peek.patch
+          if git apply /tmp/tiki-x9-pool-peek.patch 2>/dev/null; then
+            echo "RAM: parche tiki-x9-pool-peek aplicado (PR #2085, candidato sin compilar)."
+          else
+            echo "RAM: git apply de pool_peek falló, revisa el log."
+          fi
+        fi
+        grep -n pool_peek dm/gfx/nvn/nvn_mtl.m || true
         grep -n guest_file_punch dm/host/hle_svc.c || true
         echo "Mejoras tiki terminadas."
         """
