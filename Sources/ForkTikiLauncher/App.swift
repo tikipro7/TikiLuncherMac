@@ -2,7 +2,8 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// ForkTikiLauncher — v43 (10 nov 2026)
+// ForkTikiLauncher — v44 (10 nov 2026)
+// v44: fork kid actualizado a X9 (10 nov 2026): Frame Gen 30->60, pools en archivos, fix crash tras guardar, primera nota ya en X9.
 // v24: DESTINO DEL BUILD EN DISCO EXTERNO. Luis solo tiene 35 GB libres
 // en su Mac M1 y el build de Ocarina (~100 GB) no cabe en el disco
 // interno. En Paso 4 · Compilar, seccion "Destino del build", se puede
@@ -153,7 +154,7 @@ struct Preset: Identifiable, Hashable {
 
 let defaultForks: [Fork] = [
     Fork(id: "kid-with-sword",
-         name: "Ocarina optimizado — kid V22 (el mejor para Ocarina)",
+         name: "Ocarina optimizado — kid X9 (el mejor para Ocarina)",
          repo: "https://github.com/cheemu21/kid-with-sword-remake.git",
          folder: "kid-with-sword-remake"),
     Fork(id: "nxnative",
@@ -224,7 +225,7 @@ func detectGame(from path: String) -> (game: Game, titleId: String)? {
 func recommendedFork(for titleId: String) -> (forkId: String, text: String) {
     switch titleId.uppercased() {
     case "0400486024DEC000":
-        return ("kid-with-sword", "✅ Hay fork para Ocarina: kid V22 + mejoras tiki. Arregla la primera nota de ocarina y devuelve 1.84 GB de memoria. Es el mejor para este juego.")
+        return ("kid-with-sword", "✅ Hay fork para Ocarina: kid X9 + Frame Gen. El juego a 30 fps se muestra a 60 con MetalFX, pools en archivos, fix del crash tras guardar, y la primera nota de ocarina ya viene arreglada en X9. Es el mejor para este juego.")
     case "040074A01BF12000":
         return ("horizon-nx2", "✅ Hay fork para Bananza: horizon-nx2. No tiene releases, solo perfil, y solo está probado el primer nivel. También se le puede aplicar la optimización universal Switch 2.")
     case "0400A3A01EE4C000":
@@ -240,8 +241,8 @@ func recommendedFork(for titleId: String) -> (forkId: String, text: String) {
 func optimalPreset(for game: Game) -> Preset { presetNone }
 let preset30 = Preset(
     id: "m1-30fps",
-    name: "M1 + 15 Pro Max · 30 fps Potato (V22)",
-    detail: "30 fps Potato V22, render 0.25, MetalFX, Potato mode ON para 15 Pro. Primer arranque tarda más por los shaders nuevos.",
+    name: "M1 + 15 Pro Max · 30 fps Potato (X9)",
+    detail: "30 fps Potato X9, render 0.25, MetalFX, Potato mode ON para 15 Pro. Frame Gen en el launcher del juego (30 fps mostrado a 60). Primer arranque tarda más por los shaders nuevos.",
     env: """
     DM_FPS_TARGET=30
     DM_RENDER_SCALE=0.25
@@ -259,6 +260,8 @@ let preset30 = Preset(
     DM_QOS_EDGES=45,59
     DM_NVN_GPUPROF=every:600
     DM_METAL_HUD=0
+    DM_POOL_ANON_MAX_MB=512
+    DM_NVN_GMEM_NOBIG=1
     DM_SHOW_FPS=0
     """
 )
@@ -321,11 +324,11 @@ struct ContentView: View {
     @AppStorage("externalBuildsPath") private var externalBuildsPath: String = ""
     @State private var tikiFixApplied: Bool = false
     @State private var tikiFixStatus: String = ""
-    @State private var forkVersion: String = "V22 + mejoras tiki (9 nov 2026)"
+    @State private var forkVersion: String = "X9 (10 nov 2026)"
     @State private var forkUpdateStatus: String = ""
     @State private var appUpdateStatus: String = ""
-    private let appVersion = "v43"
-    private let appVersionNumber = 43
+    private let appVersion = "v44"
+    private let appVersionNumber = 44
     @State private var onlyBestFork: Bool = true
     @State private var showWelcome: Bool = true
     @State private var beginnerMode: Bool = true
@@ -751,10 +754,10 @@ struct ContentView: View {
                 }
                 Text("Esto trae TODOS los forks de nxnative que hay en GitHub, hasta 100, y los mete en esta lista. Ya no son solo 4, son todos los disponibles.")
                     .font(.callout).foregroundStyle(.secondary)
-                Text("Fork: \(forkVersion). V22 trae Potato mode para 15 Pro, MetalFX a 0.25, shaders 1 GB menos y fix de foliage en Kokiri. Aviso V22: se cierra en la primera nota de ocarina.")
+                Text("Fork: \(forkVersion). X9 trae Frame Gen (30 fps mostrado a 60), Potato mode para 15 Pro, pools en archivos, fix del crash tras guardar y la primera nota de ocarina ya arreglada. Probado en iPhone 18 Pro, no en 15 Pro Max.")
                     .font(.callout).foregroundStyle(.secondary)
                 Toggle("Mejoras tiki (Ocarina: nota + memoria)", isOn: $applyTikiFixes)
-                Text("Prendido: antes del build aplica al fork kid V22 el fix de la primera nota de ocarina (8feddfe, 4 líneas en hle_hid.c) y el fix de memoria/disco upstream 8d5d4f1 (devuelve 1.84 GB con F_PUNCHHOLE). Solo para kid/Ocarina, no toca el perfil ni el env, que los agregas tú afuera.")
+                Text("Prendido: antes del build revisa en el fork kid X9 el fix de la primera nota de ocarina (ya viene en X9, línea ~2025 en hle_hid.c) y el fix de memoria/disco upstream 8d5d4f1 (devuelve 1.84 GB con F_PUNCHHOLE). Solo para kid/Ocarina, no toca el perfil ni el env, que los agregas tú afuera.")
                     .font(.callout).foregroundStyle(.secondary)
                 HStack {
                     Button("Aplicar mejoras tiki ahora") { applyTikiFixesToFork { _ in } }
@@ -764,7 +767,7 @@ struct ContentView: View {
                     Button("Revisar si hay versión nueva") { checkForkUpdate() }
                     Text(forkUpdateStatus).font(.callout).foregroundStyle(.secondary)
                 }
-                Text("Revisar versión consulta GitHub Releases (cheemu21/kid-with-sword-remake). Si hay una V23 o más, dale a Clonar / actualizar fork y vuelve a compilar. tiki también lo revisa cada mañana y te avisa.")
+                Text("Revisar versión consulta GitHub Releases (cheemu21/kid-with-sword-remake). La última es X9 (10 nov 2026). Si hay una X10 o más, dale a Clonar / actualizar fork y vuelve a compilar. tiki también lo revisa cada mañana y te avisa.")
                     .font(.callout).foregroundStyle(.secondary)
                 Text("Se clona en ~/ForkTikiLauncher/engines/\(selectedFork.folder)")
                     .font(.callout).foregroundStyle(.secondary)
@@ -817,7 +820,7 @@ struct ContentView: View {
                 .pickerStyle(.menu)
                 Text(selectedPreset.detail).font(.callout).foregroundStyle(.secondary)
                 Toggle("Potato mode (V18+, para iPhone 15 Pro)", isOn: $potatoMode)
-                Text("Potato mode ON es lo que hace que V22 corra en tu 15 Pro Max: guarda de memoria desde 4,400 MB, recycle bin 64 MB, pools en archivos. Actívalo también en el launcher del juego al arrancar. Con Potato OFF, el build juega como V17.")
+                Text("Potato mode ON es lo que hace que X9 corra en tu 15 Pro Max: guarda de memoria desde 4,400 MB, recycle bin 64 MB, pools en archivos. Actívalo también en el launcher del juego al arrancar. Frame Gen se prende en el launcher del juego, con 30 fps.")
                     .font(.callout).foregroundStyle(.secondary)
                 Text(selectedPreset.env)
                     .font(.system(.callout, design: .monospaced))
@@ -1487,7 +1490,7 @@ struct ContentView: View {
         JSON=$(curl -sf https://api.github.com/repos/cheemu21/kid-with-sword-remake/releases/latest) || { echo "No se pudo leer GitHub (curl falló, revisa internet o límite de GitHub API)."; exit 0; }
         echo "$JSON" | grep -m1 '"tag_name"'
         echo "$JSON" | grep -m1 '"name"'
-        echo "Última versión en GitHub arriba. Si el tag es mayor que V22, dale a Clonar / actualizar fork."
+        echo "Última versión en GitHub arriba. Si el tag es mayor que X9, dale a Clonar / actualizar fork."
         """
         appendLog("$ Revisar versión del fork\n")
         runCommand("/bin/sh", ["-c", script]) { code in
@@ -1548,7 +1551,7 @@ struct ContentView: View {
         }
     }
 
-    /// Mejoras tiki para Ocarina, solo en el fork kid V22.
+    /// Mejoras tiki para Ocarina, solo en el fork kid X9.
     /// 1) Fix primera nota (commit real 8feddfe, NO b1d7c70/6121fd7):
     ///    4 líneas en dm/host/hle_hid.c, IsOunceVibrationDeviceMounted.
     /// 2) Memoria/disco upstream 8d5d4f1: guest files devuelven bloques
@@ -1593,7 +1596,7 @@ struct ContentView: View {
         let script = """
         set -x
         cd "\(dir.path)"
-        git checkout v22 2>/dev/null || git checkout 84aa8c3
+        git checkout x9 2>/dev/null || git checkout v22
         if grep -q IsOunceVibrationDeviceMounted dm/host/hle_hid.c; then
           echo "Ocarina: fix de la nota ya está."
         else
@@ -1639,7 +1642,7 @@ struct ContentView: View {
             // origin/HEAD te devolvia a V16 (e9c2f7e). Para kid, SOLO v22.
             let script: String
             if selectedFork.folder == "kid-with-sword-remake" {
-                script = "git -C '\(dir.path)' fetch origin v22; git -C '\(dir.path)' checkout v22; git -C '\(dir.path)' pull --rebase --autostash origin v22 || git -C '\(dir.path)' reset --hard origin/v22; git -C '\(dir.path)' log --oneline -1"
+                script = "git -C '\(dir.path)' fetch origin x9; git -C '\(dir.path)' checkout x9; git -C '\(dir.path)' pull --rebase --autostash origin x9 || git -C '\(dir.path)' reset --hard origin/x9; git -C '\(dir.path)' log --oneline -1"
             } else {
                 script = "git -C '\(dir.path)' fetch origin; git -C '\(dir.path)' pull --rebase --autostash || git -C '\(dir.path)' reset --hard origin/HEAD"
             }
@@ -1649,8 +1652,8 @@ struct ContentView: View {
         } else {
             runCommand("/usr/bin/git", ["clone", selectedFork.repo, dir.path]) { code in
                 if code == 0 && self.selectedFork.folder == "kid-with-sword-remake" {
-                    self.runCommand("/bin/sh", ["-c", "git -C '\(dir.path)' checkout v22 && git -C '\(dir.path)' log --oneline -1"]) { _ in
-                        self.gitStatus = "Fork clonado en v22."
+                    self.runCommand("/bin/sh", ["-c", "git -C '\(dir.path)' checkout x9 && git -C '\(dir.path)' log --oneline -1"]) { _ in
+                        self.gitStatus = "Fork clonado en x9."
                     }
                 } else {
                     self.gitStatus = code == 0 ? "Fork clonado." : "git clone falló (código \(code)). Revisa el log."

@@ -1,6 +1,6 @@
 # TikiLuncherMac
 
-ForkTikiLauncher v43 para Mac + fork tiki-v22 de Ocarina of Time.
+ForkTikiLauncher v44 para Mac + fork kid X9 de Ocarina of Time.
 
 Launcher SwiftUI para Mac que construye juegos de Switch / Switch 2 a IPA para iPhone (AltStore Classic) o a .app para Mac, con nxnative / NX2Apple, con selector de fork, presets y descarga de herramientas. Todo desde el launcher, sin abrir otra app.
 
@@ -72,7 +72,7 @@ Launcher SwiftUI para Mac que construye juegos de Switch / Switch 2 a IPA para i
 
 ## Que trae la v8
 
-- Motor kid-with-sword-remake V22 para Ocarina of Time, con toggle **"Mejoras tiki (Ocarina: nota + memoria)"** prendido por defecto.
+- Motor kid-with-sword-remake X9 para Ocarina of Time, con toggle **"Mejoras tiki (Ocarina: nota + memoria)"** prendido por defecto. X9 trae Frame Gen (30 fps mostrado a 60), pools en archivos, fix del crash tras guardar, y la primera nota ya viene en X9.
 - Antes del build aplica el parche de la primera nota de ocarina e intenta el cherry-pick de memoria upstream `8d5d4f1`. Si el cherry-pick da conflicto, lo aborta, lo dice en el log y sigue con el build.
 - Sin preset por defecto: no escribe env.txt si no eliges uno. El preset lo aplicas tu afuera.
 - Soporte Switch 2 (.nup) y Switch 1 (.nsp/.nsz, con prod.keys), iPhone / Mac, Separate / Bundle, updates y DLC, borrado del juego tras un build bueno, y chequeo de version del fork.
@@ -91,9 +91,9 @@ Requisitos: Mac Apple Silicon, macOS 26.6+, Xcode 27.2, Homebrew, Python 3.12, x
 
 ## tiki-v22
 
-Base: kid-with-sword-remake rama `v22`, commit `84aa8c3`.
+Base: kid-with-sword-remake tag `x9` (10 nov 2026, publicado 16:28 UTC). Incluye V23.
 
-- **Aplicado y verificado:** fix primera nota de ocarina, commit upstream `8feddfe` (PR seedds#1444), 4 lineas en `dm/host/hle_hid.c`, `IsOunceVibrationDeviceMounted` linea 910 en V22. Sin este fix el juego se cierra en la primera nota de Zelda's Lullaby con Impa y bloquea la quest principal.
+- **Ya viene en X9:** fix primera nota de ocarina, commit upstream `8feddfe` (PR seedds#1444), `IsOunceVibrationDeviceMounted` en `dm/host/hle_hid.c` línea ~2025 en X9. Sin este fix el juego se cierra en la primera nota de Zelda's Lullaby con Impa y bloquea la quest principal. El parche tiki ya no hace falta en X9, el launcher solo lo verifica.
 - **Resuelto a mano, candidato SIN COMPILAR:** fix de memoria/disco upstream `8d5d4f1` (F_PUNCHHOLE, 1.84 GB devueltos en M4 Pro). Dio conflicto en 5 archivos, sobre todo `dm/host/hle_svc.c` 473-589, porque kid V22 ya divergio de upstream ahi. Se resolvio hunk por hunk conservando la maquinaria Potato de kid y la firma de upstream, sin borrar lineas de kid; el diff tiene exactamente el mismo stat que upstream (199 inserciones, 31 borrados) y `git apply --check` pasa en un clon limpio. No se pudo compilar en Linux, la Mac debe validarlo con el build. Ver `patches/tiki-v22-mem.patch` y `patches/tiki-v22-mem-NOTAS.md`.
 
 Archivos: `patches/tiki-v22.patch` (solo el fix de la ocarina, SHA256 7611e951217e5222fc0c5d1f57ed7b3b54ef63d9300b8760073dbcb343767516), `patches/ocarina-note-fix.patch` (el mismo), `patches/tiki-v22-NOTAS.md`, `docs/codex-optimizaciones.md`.

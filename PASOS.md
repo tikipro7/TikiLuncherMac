@@ -1,4 +1,4 @@
-# PASOS — ForkTikiLauncher v43
+# PASOS — ForkTikiLauncher v44
 
 v24: destino del build en disco externo. En Paso 4 · Compilar, sección "Destino del build", elige Disco interno o Disco externo. Ver "Destino del build: disco externo" abajo.
 
@@ -22,13 +22,13 @@ v9: botón arriba para revisar si hay versión nueva del launcher en tikipro7/Ti
 
 App de Mac (SwiftUI) para compilar juegos de Switch con forks y presets,
 sin acordarte de los comandos. v9 (9 nov 2026): mejoras tiki aplicadas
-al fork kid V22 antes del build, si el toggle está prendido (default ON):
+al fork kid X9 antes del build, si el toggle está prendido (default ON):
 fix primera nota de ocarina (commit real 8feddfe, 4 líneas en hle_hid.c)
 y fix memoria/disco upstream 8d5d4f1 (devuelve 1.84 GB con F_PUNCHHOLE).
 También hay botón "Aplicar mejoras tiki ahora" en Fork, y el log dice
 si ya estaban o si el cherry-pick dio conflicto. Sin preset por defecto
 (v7.1, Luis lo agrega afuera). v7 (9 nov 2026): preset 30 fps actualizado a
-V22 (Potato mode V18 para 15 Pro, MetalFX a 0.25 en V19, shaders 1 GB menos
+X9 (Frame Gen 30->60, Potato mode para 15 Pro, pools en archivos, fix crash tras guardar
 en V21, foliage Kokiri en V22), botón "Revisar si hay versión nueva" en
 Fork, y toggle Potato mode. Aviso V22: se cierra en la primera nota de
 ocarina (Impa, Zelda's Lullaby). tiki revisa cada mañana si hay versión
